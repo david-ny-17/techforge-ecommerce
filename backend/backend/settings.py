@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "rest_framework",
     "corsheaders",
+    "store",
 ]
 
 MIDDLEWARE = [
@@ -133,3 +134,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+# Usuario personalizado
+AUTH_USER_MODEL = "store.CustomUser"
+
+# Archivos subidos (imágenes de productos)
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
