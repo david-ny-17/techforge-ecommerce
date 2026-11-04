@@ -1,6 +1,8 @@
 import { useState } from "react"
-import { Link, NavLink } from "react-router-dom"
-import { Cpu, Menu, ShoppingCart, User, X } from "lucide-react"
+import { Link, NavLink, useNavigate } from "react-router-dom"
+import { Cpu, LogOut, Menu, ShoppingCart, User, X } from "lucide-react"
+
+import { useAuth } from "@/context/useAuth"
 import { useCart } from "@/context/useCart"
 
 const navLinks = [
@@ -21,6 +23,16 @@ const mobileLinkClass = ({ isActive }: { isActive: boolean }) =>
 export default function Navbar() {
   const [open, setOpen] = useState(false)
   const { totalItems: cartCount } = useCart()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  const displayName = user ? user.first_name || user.username : ""
+
+  const handleLogout = () => {
+    setOpen(false)
+    navigate("/")
+    logout()
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800 bg-black/90 backdrop-blur">
@@ -42,16 +54,47 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Iconos */}
+        {/* Zona derecha */}
         <div className="flex items-center gap-1">
-          <Link
-            to="/login"
-            aria-label="Iniciar sesión"
-            className="rounded-md p-2 text-gray-300 transition-colors hover:bg-zinc-900 hover:text-purple-500"
-          >
-            <User className="h-5 w-5" />
-          </Link>
+          {/* Cuenta (escritorio) */}
+          <div className="hidden items-center gap-2 md:flex">
+            {user ? (
+              <>
+                <Link
+                  to="/profile"
+                  className="flex max-w-[11rem] items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-300 transition-colors hover:bg-zinc-900 hover:text-purple-500"
+                >
+                  <User className="h-5 w-5 shrink-0" />
+                  <span className="truncate">{displayName}</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-400 transition-colors hover:bg-zinc-900 hover:text-purple-500"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Cerrar sesión
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="rounded-md px-3 py-2 text-sm font-medium text-gray-300 transition-colors hover:text-purple-500"
+                >
+                  Iniciar sesión
+                </Link>
+                <Link
+                  to="/register"
+                  className="bg-metal glow-purple rounded-md px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Registrarse
+                </Link>
+              </>
+            )}
+          </div>
 
+          {/* Carrito */}
           <Link
             to="/cart"
             aria-label="Carrito"
@@ -90,6 +133,32 @@ export default function Navbar() {
               {link.label}
             </NavLink>
           ))}
+
+          <div className="my-2 border-t border-zinc-800" />
+
+          {user ? (
+            <>
+              <NavLink to="/profile" className={mobileLinkClass} onClick={() => setOpen(false)}>
+                Mi cuenta ({displayName})
+              </NavLink>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="block w-full rounded-md px-3 py-2 text-left text-base font-medium text-gray-300 transition-colors hover:bg-zinc-900 hover:text-purple-500"
+              >
+                Cerrar sesión
+              </button>
+            </>
+          ) : (
+            <>
+              <NavLink to="/login" className={mobileLinkClass} onClick={() => setOpen(false)}>
+                Iniciar sesión
+              </NavLink>
+              <NavLink to="/register" className={mobileLinkClass} onClick={() => setOpen(false)}>
+                Registrarse
+              </NavLink>
+            </>
+          )}
         </div>
       )}
     </header>
