@@ -1,7 +1,8 @@
 import axios from "axios"
-import { ArrowLeft, ImageOff, Loader2, ShoppingCart } from "lucide-react"
+import { ArrowLeft, ImageOff, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
+import AddToCartButton from "@/components/AddToCartButton"
 
 import {
   formatPrice,
@@ -45,11 +46,6 @@ export default function ProductDetail() {
       cancelled = true
     }
   }, [slug])
-
-  const handleAddToCart = () => {
-    // La lógica real del carrito se implementa en el Bloque 8
-    console.log("Añadir al carrito:", product)
-  }
 
   if (loading) {
     return (
@@ -152,15 +148,7 @@ export default function ProductDetail() {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleAddToCart}
-            disabled={outOfStock}
-            className="bg-metal glow-purple flex items-center justify-center gap-2 rounded-lg px-6 py-4 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
-          >
-            <ShoppingCart className="h-5 w-5" />
-            {outOfStock ? "Sin stock" : "Añadir al Carrito"}
-          </button>
+          <AddToCartButton product={product} variant="full" />
         </div>
       </div>
     </section>

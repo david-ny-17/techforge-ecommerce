@@ -27,3 +27,13 @@ export interface PaginatedResponse<T> {
   previous: string | null
   results: T[]
 }
+
+export interface CartItem {
+  id: number
+  slug: string
+  name: string
+  price: string // se guarda como texto, igual que en la API
+  image: string | null
+  stock: number
+  quantity: number
+}

@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Link, NavLink } from "react-router-dom"
 import { Cpu, Menu, ShoppingCart, User, X } from "lucide-react"
+import { useCart } from "@/context/useCart"
 
 const navLinks = [
   { to: "/catalog", label: "Catálogo" },
@@ -19,7 +20,7 @@ const mobileLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function Navbar() {
   const [open, setOpen] = useState(false)
-  const cartCount = 0 // Se conectará al contexto del carrito en un bloque posterior
+  const { totalItems: cartCount } = useCart()
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800 bg-black/90 backdrop-blur">
@@ -58,8 +59,8 @@ export default function Navbar() {
           >
             <ShoppingCart className="h-5 w-5" />
             {cartCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-700 px-1 text-[10px] font-bold text-white">
-                {cartCount}
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-purple-600 px-1 text-[10px] font-bold text-white shadow-[0_0_8px_rgb(139_47_232/0.6)]">
+                {cartCount > 99 ? "99+" : cartCount}
               </span>
             )}
           </Link>
