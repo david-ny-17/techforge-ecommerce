@@ -1,11 +1,22 @@
-import { Button } from "@/components/ui/button"
+import { BrowserRouter, Route, Routes } from "react-router-dom"
 
-function App() {
+import Layout from "@/components/Layout"
+import Catalog from "@/pages/Catalog"
+import Home from "@/pages/Home"
+import Login from "@/pages/Login"
+import SmartBuilder from "@/pages/SmartBuilder"
+
+export default function App() {
   return (
-    <div className="flex min-h-svh items-center justify-center">
-      <Button>TechForge funciona</Button>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/catalog" element={<Catalog />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/builder" element={<SmartBuilder />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }
-
-export default App
