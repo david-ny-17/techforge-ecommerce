@@ -8,7 +8,15 @@ import {
   getRefreshToken,
   saveTokens,
 } from "@/lib/auth-storage"
-import type { AuthTokens, PaginatedResponse, Product, RegisterData, User } from "@/types"
+import type {
+  AuthTokens,
+  CheckoutPayload,
+  CheckoutResponse,
+  PaginatedResponse,
+  Product,
+  RegisterData,
+  User,
+} from "@/types"
 
 const API_URL = "http://localhost:8000/api/"
 
@@ -111,5 +119,10 @@ export async function registerRequest(payload: RegisterData): Promise<User> {
 
 export async function getProfile(): Promise<User> {
   const { data } = await api.get<User>("auth/profile/")
+  return data
+}
+
+export async function processCheckout(orderData: CheckoutPayload): Promise<CheckoutResponse> {
+  const { data } = await api.post<CheckoutResponse>("checkout/", orderData)
   return data
 }

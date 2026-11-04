@@ -62,3 +62,33 @@ export interface RegisterData {
   password: string
   password2: string
 }
+
+export interface OrderItem {
+  id: number
+  product: number
+  product_name: string
+  product_slug: string
+  quantity: number
+  unit_price: string
+  subtotal: string
+}
+
+export type OrderStatus = "PENDING" | "PAID" | "FAILED"
+
+export interface Order {
+  id: number
+  total: string
+  status: OrderStatus
+  created_at: string
+  items: OrderItem[]
+}
+
+export interface CheckoutPayload {
+  cart_items: { product_id: number; quantity: number }[]
+  payment_info: { card_number: string }
+}
+
+export interface CheckoutResponse {
+  detail: string
+  order: Order
+}
