@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import Category, CustomUser, Product
+from .models import Category, CustomUser, Order, OrderItem, Product
 
 
 @admin.register(CustomUser)
@@ -41,3 +41,19 @@ class ProductAdmin(admin.ModelAdmin):
         ("Especificaciones técnicas (IA)", {"fields": ("specifications",)}),
         ("Auditoría", {"fields": ("created_at", "updated_at")}),
     )
+
+
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
+    extra = 0
+    readonly_fields = ("product", "quantity", "unit_price")
+    can_delete = False
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "total", "status", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("user__username", "user__email", "id")
+    readonly_fields = ("user", "total", "created_at")
+    inlines = [OrderItemInline]

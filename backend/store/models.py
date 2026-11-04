@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.conf import settings
 
 
 class CustomUser(AbstractUser):
@@ -61,3 +62,56 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+class Order(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pendiente"
+        PAID = "PAID", "Pagado"
+        FAILED = "FAILED", "Fallido"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="orders",
+        verbose_name="usuario",
+    )
+    total = models.DecimalField("total", max_digits=12, decimal_places=2)
+    status = models.CharField(
+        "estado", max_length=10, choices=Status.choices, default=Status.PENDING
+    )
+    created_at = models.DateTimeField("fecha de creación", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "pedido"
+        verbose_name_plural = "pedidos"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Pedido #{self.pk} - {self.user} - {self.status}"
+
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name="items", verbose_name="pedido"
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="order_items",
+        verbose_name="producto",
+    )
+    quantity = models.PositiveIntegerField("cantidad")
+    unit_price = models.DecimalField(
+        "precio unitario", max_digits=10, decimal_places=2
+    )
+
+    class Meta:
+        verbose_name = "detalle de pedido"
+        verbose_name_plural = "detalles de pedido"
+
+    @property
+    def subtotal(self):
+        return self.unit_price * self.quantity
+
+    def __str__(self):
+        return f"{self.quantity} x {self.product.name}"

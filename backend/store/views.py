@@ -1,11 +1,18 @@
+from decimal import Decimal
+
 import django_filters
 from django.contrib.auth import get_user_model
-from rest_framework import generics, viewsets
+from django.db import transaction
+from rest_framework import generics, status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import Category, Product
+from .models import Category, Order, OrderItem, Product
 from .serializers import (
     CategorySerializer,
+    CheckoutSerializer,
+    OrderSerializer,
     ProductSerializer,
     RegisterSerializer,
     UserSerializer,
@@ -37,7 +44,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [AllowAny]
     lookup_field = "slug"
-    pagination_class = None  # pocas categorías: se devuelven todas
+    pagination_class = None
 
 
 class ProductFilter(django_filters.FilterSet):
@@ -56,10 +63,7 @@ class ProductFilter(django_filters.FilterSet):
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Product.objects.filter(is_active=True)
-        .select_related("category")
-    )
+    queryset = Product.objects.filter(is_active=True).select_related("category")
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]
     lookup_field = "slug"
@@ -67,3 +71,108 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ["name", "description"]
     ordering_fields = ["price", "created_at", "name"]
     ordering = ["-created_at"]
+
+
+# ---------- Pedidos y checkout simulado ----------
+
+class CheckoutError(Exception):
+    """Error de negocio: provoca rollback de la transacción."""
+
+
+class CheckoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = CheckoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        cart_items = serializer.validated_data["cart_items"]
+        card_number = serializer.validated_data["payment_info"]["card_number"]
+
+        # Une productos repetidos en el carrito: {product_id: cantidad_total}
+        quantities = {}
+        for item in cart_items:
+            pid = item["product_id"]
+            quantities[pid] = quantities.get(pid, 0) + item["quantity"]
+
+        # Pago simulado: aprueba solo si la tarjeta termina en 4242
+        payment_approved = card_number.endswith("4242")
+
+        try:
+            with transaction.atomic():
+                products = Product.objects.select_for_update().filter(
+                    id__in=quantities.keys(), is_active=True
+                )
+                products_by_id = {p.id: p for p in products}
+
+                missing = sorted(set(quantities) - set(products_by_id))
+                if missing:
+                    raise CheckoutError(
+                        f"Productos no disponibles: {missing}"
+                    )
+
+                # El precio SIEMPRE se toma de la base de datos, nunca del front
+                total = Decimal("0.00")
+                lines = []
+                for pid, qty in quantities.items():
+                    product = products_by_id[pid]
+                    if product.stock < qty:
+                        raise CheckoutError(
+                            f"Stock insuficiente para '{product.name}' "
+                            f"(disponible: {product.stock})."
+                        )
+                    total += product.price * qty
+                    lines.append((product, qty))
+
+                order = Order.objects.create(
+                    user=request.user,
+                    total=total,
+                    status=(
+                        Order.Status.PAID if payment_approved else Order.Status.FAILED
+                    ),
+                )
+                OrderItem.objects.bulk_create(
+                    [
+                        OrderItem(
+                            order=order,
+                            product=product,
+                            quantity=qty,
+                            unit_price=product.price,
+                        )
+                        for product, qty in lines
+                    ]
+                )
+
+                # El stock solo se descuenta si el pago fue aprobado
+                if payment_approved:
+                    for product, qty in lines:
+                        product.stock -= qty
+                        product.save(update_fields=["stock", "updated_at"])
+
+        except CheckoutError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = OrderSerializer(order).data
+
+        if not payment_approved:
+            return Response(
+                {"detail": "Pago rechazado. Tarjeta no válida.", "order": data},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(
+            {"detail": "Pago aprobado.", "order": data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class OrderHistoryView(generics.ListAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            Order.objects.filter(user=self.request.user)
+            .prefetch_related("items__product")
+            .order_by("-created_at")
+        )

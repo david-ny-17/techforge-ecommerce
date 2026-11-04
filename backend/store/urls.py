@@ -4,6 +4,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .views import (
     CategoryViewSet,
+    CheckoutView,
+    OrderHistoryView,
     ProductViewSet,
     RegisterView,
     UserProfileView,
@@ -19,6 +21,9 @@ urlpatterns = [
     path("auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/profile/", UserProfileView.as_view(), name="profile"),
+    # Pedidos
+    path("checkout/", CheckoutView.as_view(), name="checkout"),
+    path("orders/", OrderHistoryView.as_view(), name="order-history"),
     # Catálogo
     path("", include(router.urls)),
 ]
