@@ -1,5 +1,5 @@
 import { ImageOff } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 
 import AddToCartButton from "@/components/AddToCartButton"
 import { formatPrice, getProductImage } from "@/lib/format"
@@ -13,11 +13,13 @@ export default function ProductCard({ product }: ProductCardProps) {
   const image = getProductImage(product)
   const outOfStock = product.stock === 0
   const detailUrl = `/product/${product.slug}`
+  const location = useLocation()
+  const from = location.pathname + location.search
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-all duration-200 hover:border-purple-600 hover:shadow-[0_0_24px_rgb(139_47_232/0.25)]">
       {/* Zona clicable: imagen + datos */}
-      <Link to={detailUrl} className="flex flex-1 flex-col">
+      <Link to={detailUrl} state={{ from }} className="flex flex-1 flex-col">
         <div className="relative aspect-square w-full overflow-hidden bg-zinc-950">
           {image ? (
             <img
@@ -55,6 +57,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       <div className="flex items-center gap-2 p-4 pt-2">
         <Link
           to={detailUrl}
+          state={{ from }}
           className="flex-1 rounded-md border border-purple-600 bg-black px-4 py-2 text-center text-sm font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
         >
           Ver detalles

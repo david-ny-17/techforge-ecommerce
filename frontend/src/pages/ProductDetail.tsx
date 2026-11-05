@@ -1,7 +1,7 @@
 import axios from "axios"
 import { ArrowLeft, ImageOff, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useLocation, useParams } from "react-router-dom"
 import AddToCartButton from "@/components/AddToCartButton"
 
 import {
@@ -14,6 +14,9 @@ import { getProductBySlug } from "@/services/api"
 import type { Product } from "@/types"
 
 export default function ProductDetail() {
+  const location = useLocation()
+  const stateFrom = (location.state as { from?: string } | null)?.from
+  const fromCatalog = stateFrom?.startsWith("/catalog") ? stateFrom : null
   const { slug } = useParams<{ slug: string }>()
   const [product, setProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,7 +64,7 @@ export default function ProductDetail() {
       <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center gap-4 px-4 text-center">
         <p className="text-zinc-300">{error ?? "Producto no encontrado."}</p>
         <Link
-          to="/catalog"
+          to={fromCatalog ?? "/catalog"}
           className="bg-metal glow-purple rounded-md px-5 py-2 font-semibold text-white"
         >
           Volver al catálogo
@@ -73,11 +76,12 @@ export default function ProductDetail() {
   const image = getProductImage(product)
   const outOfStock = product.stock === 0
   const specs = Object.entries(product.specifications ?? {})
+  const backTo = fromCatalog ?? `/catalog?category=${product.category.slug}`
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <Link
-        to="/catalog"
+        to={backTo}
         className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-purple-500"
       >
         <ArrowLeft className="h-4 w-4" />

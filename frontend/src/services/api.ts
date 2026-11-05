@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth-storage"
 import type {
   AuthTokens,
+  Category,
   CheckoutPayload,
   CheckoutResponse,
   PaginatedResponse,
@@ -94,10 +95,25 @@ api.interceptors.response.use(
 )
 
 // ---------- Catálogo ----------
-export async function getProducts(
-  params?: Record<string, string | number | boolean>
-): Promise<PaginatedResponse<Product>> {
+export interface ProductQuery {
+  page?: number
+  category_slug?: string
+  search?: string
+  ordering?: string
+  min_price?: number
+  max_price?: number
+  in_stock?: boolean
+}
+
+// Axios omite los parámetros que valgan undefined
+export async function getProducts(params?: ProductQuery): Promise<PaginatedResponse<Product>> {
   const { data } = await api.get<PaginatedResponse<Product>>("products/", { params })
+  return data
+}
+
+// /categories/ no está paginado en el backend: devuelve un array simple
+export async function getCategories(): Promise<Category[]> {
+  const { data } = await api.get<Category[]>("categories/")
   return data
 }
 
