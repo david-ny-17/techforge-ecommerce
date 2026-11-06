@@ -92,3 +92,8 @@ export interface CheckoutResponse {
   detail: string
   order: Order
 }
+
+export interface SmartBuilderResponse {
+  message: string
+  products: Product[]
+}

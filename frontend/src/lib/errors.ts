@@ -76,3 +76,33 @@ export function parseCheckoutError(err: unknown): string {
 
   return parseApiError(err).message
 }
+
+// Mensajes de error del Smart Builder
+export function parseSmartBuilderError(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    if (err.code === "ECONNABORTED" || err.code === "ETIMEDOUT") {
+      return "La IA tardó demasiado en responder. Inténtalo de nuevo."
+    }
+
+    if (err.response) {
+      const { status, data } = err.response
+
+      // Límite de uso del backend (DRF responde en inglés)
+      if (status === 429) {
+        return "Demasiadas consultas seguidas. Espera un momento e inténtalo de nuevo."
+      }
+
+      if (data && typeof data === "object") {
+        const body = data as Record<string, unknown>
+        if (typeof body.detail === "string") return body.detail
+        if (Array.isArray(body.prompt)) return body.prompt.join(" ")
+      }
+
+      if (status >= 500) {
+        return "El asistente no está disponible por ahora. Inténtalo más tarde."
+      }
+    }
+  }
+
+  return parseApiError(err).message
+}

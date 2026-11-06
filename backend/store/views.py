@@ -6,8 +6,10 @@ from django.db import transaction
 from rest_framework import generics, status, viewsets
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from .ai_service import AIServiceError, get_pc_build_recommendation
 from .models import Category, Order, OrderItem, Product
 from .serializers import (
     CategorySerializer,
@@ -15,6 +17,7 @@ from .serializers import (
     OrderSerializer,
     ProductSerializer,
     RegisterSerializer,
+    SmartBuilderRequestSerializer,
     UserSerializer,
 )
 
@@ -176,3 +179,31 @@ class OrderHistoryView(generics.ListAPIView):
             .prefetch_related("items__product")
             .order_by("-created_at")
         )
+
+# ---------- Smart Builder (IA) ----------
+
+class SmartBuilderView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "smart_builder"
+
+    def post(self, request):
+        serializer = SmartBuilderRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = get_pc_build_recommendation(serializer.validated_data["prompt"])
+        except AIServiceError as exc:
+            return Response({"detail": str(exc)}, status=exc.status_code)
+
+        ids = result["recommended_product_ids"]
+        products = Product.objects.filter(id__in=ids, is_active=True).select_related(
+            "category"
+        )
+        by_id = {product.id: product for product in products}
+        ordered = [by_id[pid] for pid in ids if pid in by_id]
+
+        # El contexto con `request` es necesario para que la imagen salga con URL absoluta
+        data = ProductSerializer(ordered, many=True, context={"request": request}).data
+
+        return Response({"message": result["message"], "products": data})

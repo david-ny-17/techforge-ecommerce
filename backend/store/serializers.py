@@ -143,3 +143,8 @@ class PaymentInfoSerializer(serializers.Serializer):
 class CheckoutSerializer(serializers.Serializer):
     cart_items = CartItemSerializer(many=True, allow_empty=False)
     payment_info = PaymentInfoSerializer()
+
+# ---------- Smart Builder ----------
+
+class SmartBuilderRequestSerializer(serializers.Serializer):
+    prompt = serializers.CharField(min_length=10, max_length=600, trim_whitespace=True)

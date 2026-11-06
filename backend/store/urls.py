@@ -8,6 +8,7 @@ from .views import (
     OrderHistoryView,
     ProductViewSet,
     RegisterView,
+    SmartBuilderView,
     UserProfileView,
 )
 
@@ -24,6 +25,7 @@ urlpatterns = [
     # Pedidos
     path("checkout/", CheckoutView.as_view(), name="checkout"),
     path("orders/", OrderHistoryView.as_view(), name="order-history"),
+    path("smart-builder/", SmartBuilderView.as_view(), name="smart-builder"),
     # Catálogo
     path("", include(router.urls)),
 ]

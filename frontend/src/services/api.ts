@@ -16,6 +16,7 @@ import type {
   PaginatedResponse,
   Product,
   RegisterData,
+  SmartBuilderResponse,
   User,
 } from "@/types"
 
@@ -140,5 +141,16 @@ export async function getProfile(): Promise<User> {
 
 export async function processCheckout(orderData: CheckoutPayload): Promise<CheckoutResponse> {
   const { data } = await api.post<CheckoutResponse>("checkout/", orderData)
+  return data
+}
+
+// ---------- Smart Builder (IA) ----------
+// La IA puede tardar: se amplía el timeout solo para esta petición
+export async function askSmartBuilder(prompt: string): Promise<SmartBuilderResponse> {
+  const { data } = await api.post<SmartBuilderResponse>(
+    "smart-builder/",
+    { prompt },
+    { timeout: 90000 }
+  )
   return data
 }
