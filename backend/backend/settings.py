@@ -176,3 +176,4 @@ SIMPLE_JWT = {
 # Inteligencia artificial (Smart Builder)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+PAYMENT_SIMULATED_DELAY = float(os.getenv("PAYMENT_SIMULATED_DELAY", "2"))

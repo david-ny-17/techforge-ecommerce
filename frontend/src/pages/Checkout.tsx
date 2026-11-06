@@ -1,5 +1,5 @@
 import { CreditCard, ImageOff, Loader2, Lock, MapPin } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react"
 import { Link, Navigate, useNavigate } from "react-router-dom"
 
@@ -62,6 +62,13 @@ function validate(form: CheckoutForm): FormErrors {
   return errors
 }
 
+const PAYMENT_STEPS = [
+  "Encriptando transacción...",
+  "Verificando fondos...",
+  "Autorizando con la entidad bancaria...",
+  "Generando tu orden...",
+]
+
 export default function Checkout() {
   const { user } = useAuth()
   const { cart, totalItems, clearCart, getCartTotal } = useCart()
@@ -79,6 +86,16 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false)
   // Evita el rebote a /cart cuando el carrito se vacía tras pagar
   const [completed, setCompleted] = useState(false)
+  const [step, setStep] = useState(0)
+
+// Avanza los mensajes mientras se procesa el pago y se detiene en el último
+  useEffect(() => {
+    if (!submitting) return
+    const timer = window.setInterval(() => {
+      setStep((prev) => Math.min(prev + 1, PAYMENT_STEPS.length - 1))
+    }, 700)
+    return () => window.clearInterval(timer)
+  }, [submitting])
 
   if (cart.length === 0 && !completed) {
     return <Navigate to="/cart" replace />
@@ -144,9 +161,26 @@ export default function Checkout() {
         {/* Columna izquierda: formulario */}
         <form onSubmit={handleSubmit} noValidate className="relative lg:col-span-2">
           {submitting && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/80 backdrop-blur-sm">
-              <Loader2 className="h-10 w-10 animate-spin text-purple-500" />
-              <p className="font-medium text-gray-100">Procesando pago...</p>
+            <div
+              role="status"
+              aria-live="polite"
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-xl bg-black/80 backdrop-blur-md"
+            >
+              <div className="relative h-16 w-16">
+                <span className="absolute inset-0 animate-ping rounded-full bg-purple-600/30" />
+                <span className="absolute inset-0 animate-spin rounded-full border-2 border-purple-900 border-t-purple-500" />
+                <Lock className="absolute inset-0 m-auto h-6 w-6 text-purple-400" />
+              </div>
+              <p className="font-mono text-xs uppercase tracking-widest text-purple-500">
+                Pasarela segura
+              </p>
+              <p className="font-medium text-gray-100">{PAYMENT_STEPS[step]}</p>
+              <div className="h-1 w-56 overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-purple-600 transition-all duration-500"
+                  style={{ width: `${((step + 1) / PAYMENT_STEPS.length) * 100}%` }}
+                />
+              </div>
               <p className="text-sm text-zinc-500">No cierres ni recargues esta página.</p>
             </div>
           )}

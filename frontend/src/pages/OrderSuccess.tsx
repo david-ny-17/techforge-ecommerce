@@ -26,7 +26,7 @@ export default function OrderSuccess() {
       <h1 className="mt-8 text-4xl font-bold">
         ¡Pago <span className="text-metal">procesado</span>!
       </h1>
-      <p className="mt-2 text-zinc-400">Tu pedido está en camino.</p>
+      <p className="mt-2 text-zinc-400">Orden generada exitosamente. Tu pedido está en camino.</p>
 
       <div className="mt-8 w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 text-left">
         <div className="flex items-center justify-between border-b border-zinc-800 bg-zinc-900 px-5 py-3">

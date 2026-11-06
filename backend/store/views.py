@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import django_filters
+import time
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import generics, status, viewsets
@@ -8,6 +9,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from django.conf import settings
 
 from .ai_service import AIServiceError, get_pc_build_recommendation
 from .models import Category, Order, OrderItem, Product
@@ -100,6 +102,7 @@ class CheckoutView(APIView):
 
         # Pago simulado: aprueba solo si la tarjeta termina en 4242
         payment_approved = card_number.endswith("4242")
+        time.sleep(settings.PAYMENT_SIMULATED_DELAY)
 
         try:
             with transaction.atomic():
