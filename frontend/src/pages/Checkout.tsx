@@ -124,9 +124,11 @@ export default function Checkout() {
 
     setSubmitting(true)
     try {
-      const result = await processCheckout({
+       const result = await processCheckout({
         cart_items: cart.map((item) => ({ product_id: item.id, quantity: item.quantity })),
         payment_info: { card_number: form.cardNumber.replace(/\D/g, "") },
+        shipping_address: form.address.trim(),
+        shipping_city: form.city.trim(),
       })
 
       // Pago aprobado: se vacía el carrito y se muestra la pantalla de éxito
@@ -134,10 +136,7 @@ export default function Checkout() {
       clearCart()
       navigate("/order-success", {
         replace: true,
-        state: {
-          order: result.order,
-          shipping: { address: form.address.trim(), city: form.city.trim() },
-        },
+        state: { order: result.order },
       })
     } catch (err) {
       // Pago rechazado u otro error: el carrito se conserva para reintentar

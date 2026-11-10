@@ -119,9 +119,16 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ("id", "total", "status", "created_at", "items")
+        fields = (
+            "id",
+            "total",
+            "status",
+            "created_at",
+            "shipping_address",
+            "shipping_city",
+            "items",
+        )
         read_only_fields = fields
-
 
 # ---------- Entrada del checkout (validación del JSON recibido) ----------
 
@@ -143,6 +150,8 @@ class PaymentInfoSerializer(serializers.Serializer):
 class CheckoutSerializer(serializers.Serializer):
     cart_items = CartItemSerializer(many=True, allow_empty=False)
     payment_info = PaymentInfoSerializer()
+    shipping_address = serializers.CharField(min_length=5, max_length=255)
+    shipping_city = serializers.CharField(min_length=2, max_length=100)
 
 # ---------- Smart Builder ----------
 

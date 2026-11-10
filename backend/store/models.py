@@ -80,6 +80,12 @@ class Order(models.Model):
         "estado", max_length=10, choices=Status.choices, default=Status.PENDING
     )
     created_at = models.DateTimeField("fecha de creación", auto_now_add=True)
+    shipping_address = models.CharField(
+        "dirección de envío", max_length=255, blank=True, default=""
+    )
+    shipping_city = models.CharField(
+        "ciudad de envío", max_length=100, blank=True, default=""
+    )
 
     class Meta:
         verbose_name = "pedido"

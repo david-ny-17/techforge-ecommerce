@@ -80,12 +80,16 @@ export interface Order {
   total: string
   status: OrderStatus
   created_at: string
+  shipping_address: string
+  shipping_city: string
   items: OrderItem[]
 }
 
 export interface CheckoutPayload {
   cart_items: { product_id: number; quantity: number }[]
   payment_info: { card_number: string }
+  shipping_address: string
+  shipping_city: string
 }
 
 export interface CheckoutResponse {

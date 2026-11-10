@@ -6,13 +6,11 @@ import type { Order } from "@/types"
 
 interface SuccessState {
   order?: Order
-  shipping?: { address: string; city: string }
 }
 
 export default function OrderSuccess() {
   const state = useLocation().state as SuccessState | null
   const order = state?.order
-  const shipping = state?.shipping
 
   // Si se entra directo a la URL (sin haber pagado), no hay nada que mostrar
   if (!order) return <Navigate to="/" replace />
@@ -54,11 +52,11 @@ export default function OrderSuccess() {
           <span className="text-metal text-2xl font-bold">{formatPrice(order.total)}</span>
         </div>
 
-        {shipping && (
+        {order.shipping_address && (
           <div className="border-t border-zinc-800 px-5 py-4 text-sm">
             <p className="text-zinc-500">Enviaremos tu pedido a:</p>
             <p className="mt-1 text-gray-100">
-              {shipping.address}, {shipping.city}
+              {order.shipping_address}, {order.shipping_city}
             </p>
           </div>
         )}

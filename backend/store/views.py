@@ -93,6 +93,8 @@ class CheckoutView(APIView):
 
         cart_items = serializer.validated_data["cart_items"]
         card_number = serializer.validated_data["payment_info"]["card_number"]
+        shipping_address = serializer.validated_data["shipping_address"]
+        shipping_city = serializer.validated_data["shipping_city"]
 
         # Une productos repetidos en el carrito: {product_id: cantidad_total}
         quantities = {}
@@ -136,6 +138,8 @@ class CheckoutView(APIView):
                     status=(
                         Order.Status.PAID if payment_approved else Order.Status.FAILED
                     ),
+                    shipping_address=shipping_address,
+                    shipping_city=shipping_city,
                 )
                 OrderItem.objects.bulk_create(
                     [

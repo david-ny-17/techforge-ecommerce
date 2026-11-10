@@ -63,6 +63,15 @@ export function parseCheckoutError(err: unknown): string {
       if (Array.isArray(cardErrors) && cardErrors.length > 0) {
         return cardErrors.join(" ")
       }
+      const addressErrors = body.shipping_address as string[] | undefined
+      if (addressErrors && addressErrors.length > 0) {
+        return `Dirección de envío: ${addressErrors.join(" ")}`
+      }
+
+      const cityErrors = body.shipping_city as string[] | undefined
+      if (cityErrors && cityErrors.length > 0) {
+        return `Ciudad de envío: ${cityErrors.join(" ")}`
+      }
 
       if (body.cart_items) {
         return "Hay un problema con los productos de tu carrito. Revísalo e inténtalo de nuevo."
