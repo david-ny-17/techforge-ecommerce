@@ -3,13 +3,15 @@ Puebla la base de datos de TechForge con un catálogo de hardware 2024-2026.
 
 Uso (desde la carpeta donde está manage.py):
     python manage.py seed_products
-    python manage.py seed_products --dry-run            # solo valida, no escribe
-    python manage.py seed_products --reset              # recrea los productos del catálogo
-    python manage.py seed_products --price-factor 3.7   # precios USD -> soles (ajusta el tipo de cambio)
+    python manage.py seed_products --dry-run                 # solo valida, no escribe
+    python manage.py seed_products --reset                   # recrea los productos del catálogo
+    python manage.py seed_products --price-factor 3.6        # usa otro tipo de cambio USD -> soles
+    python manage.py seed_products --update-prices           # actualiza precios de productos ya existentes
+    python manage.py seed_products --dry-run --update-prices # muestra cuántos precios cambiarían
 
-El catálogo vive en archivos `_catalog_*.py` de esta misma carpeta; cada uno
-expone una lista `PRODUCTS`. Para ampliar el catálogo basta con añadir otro
-archivo `_catalog_XX_nombre.py`: se detecta solo.
+El catálogo (archivos `_catalog_*.py`) está en USD; el seed lo convierte a SOLES
+con USD_TO_PEN y redondea a soles enteros. Para ampliar el catálogo basta con
+añadir otro archivo `_catalog_XX_nombre.py`: se detecta solo.
 """
 import importlib
 import json
@@ -27,6 +29,9 @@ from django.utils.text import slugify
 from store.models import Category, Product
 
 from ._helpers import TIERS
+
+# Tipo de cambio por defecto USD -> PEN (el catálogo está escrito en dólares)
+USD_TO_PEN = Decimal("3.45")
 
 CATEGORIES = [
     ("procesadores", "Procesadores", "CPUs AMD Ryzen e Intel Core Ultra para todas las gamas."),
@@ -52,6 +57,11 @@ STOCK_BY_TIER = {
     "media-alta": (6, 25), "alta": (3, 15), "entusiasta": (1, 6),
 }
 _SKIP_IN_DESCRIPTION = {"brand", "tier", "release_year"}
+
+
+def to_pen(usd_price, factor):
+    """USD -> soles enteros (redondeo half-up, igual que la conversión ya aplicada a la BD)."""
+    return (Decimal(str(usd_price)) * factor).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
 def load_catalog():
@@ -122,8 +132,12 @@ class Command(BaseCommand):
             help="Borra antes los productos del catálogo que no tengan pedidos y los recrea.",
         )
         parser.add_argument(
-            "--price-factor", type=float, default=1.0,
-            help="Multiplica todos los precios (el catálogo está en USD). Ej: 3.7 para soles.",
+            "--price-factor", type=float, default=None,
+            help=f"Tipo de cambio USD -> soles. Por defecto {USD_TO_PEN}.",
+        )
+        parser.add_argument(
+            "--update-prices", action="store_true",
+            help="Actualiza el precio de los productos del catálogo que ya existen.",
         )
         parser.add_argument(
             "--dry-run", action="store_true",
@@ -132,13 +146,15 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
-        if options["price_factor"] <= 0:
+        price_factor = options["price_factor"]
+        if price_factor is not None and price_factor <= 0:
             raise CommandError("--price-factor debe ser mayor que 0.")
-        factor = Decimal(str(options["price_factor"]))
+        factor = USD_TO_PEN if price_factor is None else Decimal(str(price_factor))
         dry_run = options["dry_run"]
 
         modules, items = load_catalog()
         self.stdout.write(f"Catálogo: {len(items)} productos en {len(modules)} archivo(s).")
+        self.stdout.write(f"Tipo de cambio USD -> PEN: {factor}")
         validate(items, {slug for slug, _, _ in CATEGORIES})
 
         # Slugs únicos (el slug sale del nombre)
@@ -152,8 +168,14 @@ class Command(BaseCommand):
         if duplicates:
             raise CommandError("Nombres duplicados en el catálogo:\n  " + "\n  ".join(duplicates))
 
+        # Precio en soles de cada producto del catálogo
+        price_by_slug = {slug: to_pen(item["price"], factor) for slug, item in entries}
+
         if dry_run:
             self.stdout.write(self.style.WARNING("--dry-run: no se escribió nada en la base de datos."))
+            if options["update_prices"]:
+                changes = self._prices_to_update(price_by_slug)
+                self.stdout.write(f"--update-prices: cambiarían {len(changes)} precios.")
             self._summary(Counter(item["category"] for _, item in entries), dict(
                 (slug, name) for slug, name, _ in CATEGORIES))
             return
@@ -189,14 +211,12 @@ class Command(BaseCommand):
                 skipped += 1
                 continue
             specs = item["specifications"]
-            price = (Decimal(str(item["price"])) * factor).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP)
             to_create.append(Product(
                 category=categories[item["category"]],
                 name=item["name"],
                 slug=slug,
                 description=item.get("description") or build_description(item),
-                price=price,
+                price=price_by_slug[slug],
                 stock=rng.randint(*STOCK_BY_TIER[specs["tier"]]),
                 image_url=f"https://placehold.co/600x400/png?text={quote_plus(item['name'][:40])}",
                 specifications=specs,
@@ -207,10 +227,28 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"Listo: {len(created)} productos creados, {skipped} ya existían (omitidos)."))
+
+        # 4) Actualizar precios de los existentes (solo si se pidió)
+        if options["update_prices"]:
+            changes = self._prices_to_update(price_by_slug)
+            Product.objects.bulk_update(changes, ["price"], batch_size=100)
+            self.stdout.write(self.style.SUCCESS(
+                f"--update-prices: {len(changes)} precios actualizados."))
+
         self._summary(
             Counter(p.category.slug for p in created),
             {slug: name for slug, name, _ in CATEGORIES},
         )
+
+    def _prices_to_update(self, price_by_slug):
+        """Productos existentes del catálogo cuyo precio difiere del calculado (no guarda nada)."""
+        changes = []
+        for product in Product.objects.only("slug", "price"):
+            new_price = price_by_slug.get(product.slug)
+            if new_price is not None and product.price != new_price:
+                product.price = new_price
+                changes.append(product)
+        return changes
 
     def _summary(self, counter, names):
         self.stdout.write("Productos por categoría:")
