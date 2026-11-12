@@ -1,6 +1,7 @@
 import axios from "axios"
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react"
 import { useEffect, useState } from "react"
+import type { ChangeEvent, FormEvent } from "react"
 import { useSearchParams } from "react-router-dom"
 
 import ProductCard from "@/components/ProductCard"
@@ -29,6 +30,19 @@ const CATEGORY_ORDER = [
   "Accesorios",
 ]
 
+// Opciones de orden (el valor es el que entiende la API; "" = más recientes)
+const ORDERING_OPTIONS = [
+  { value: "", label: "Más recientes" },
+  { value: "price", label: "Precio: menor a mayor" },
+  { value: "-price", label: "Precio: mayor a menor" },
+  { value: "name", label: "Nombre: A-Z" },
+  { value: "-name", label: "Nombre: Z-A" },
+]
+const VALID_ORDERINGS = ORDERING_OPTIONS.map((option) => option.value)
+
+const INPUT_CLASS =
+  "w-full rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm text-gray-100 placeholder:text-zinc-600 focus:border-purple-600 focus:outline-none focus:ring-1 focus:ring-purple-600 disabled:opacity-50"
+
 // Ignora tildes y mayúsculas al comparar nombres
 const normalize = (text: string) =>
   text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
@@ -41,8 +55,19 @@ function sortCategories(list: Category[]): Category[] {
   return [...list].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, "es"))
 }
 
+// Solo acepta enteros no negativos; cualquier otra cosa escrita en la URL se ignora
+const cleanPrice = (value: string | null) => (value && /^\d{1,7}$/.test(value) ? value : "")
+
+interface Filters {
+  search: string
+  ordering: string
+  minPrice: string
+  maxPrice: string
+  inStock: boolean
+}
+
 interface CatalogResult {
-  key: string // identifica a qué consulta (categoría|página) pertenece este resultado
+  key: string // identifica a qué consulta pertenece este resultado
   products: Product[]
   total: number
   hasNext: boolean
@@ -74,11 +99,155 @@ function CategoryButton({ label, active, onClick }: CategoryButtonProps) {
   )
 }
 
+interface FiltersBarProps {
+  applied: Filters
+  hasActive: boolean
+  onApply: (filters: Filters) => void
+  onClear: () => void
+}
+
+// Buscador, precios, orden y stock. Los textos que se escriben viven aquí como
+// borrador; solo se envían a la URL al pulsar Enter o "Aplicar".
+function FiltersBar({ applied, hasActive, onApply, onClear }: FiltersBarProps) {
+  const [search, setSearch] = useState(applied.search)
+  const [minPrice, setMinPrice] = useState(applied.minPrice)
+  const [maxPrice, setMaxPrice] = useState(applied.maxPrice)
+  const [priceError, setPriceError] = useState<string | null>(null)
+
+  const handlePriceChange =
+    (setter: (value: string) => void) => (e: ChangeEvent<HTMLInputElement>) => {
+      setter(e.target.value.replace(/\D/g, "").slice(0, 7))
+      setPriceError(null)
+    }
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    if (minPrice && maxPrice && Number(minPrice) > Number(maxPrice)) {
+      setPriceError("El precio mínimo no puede ser mayor que el máximo.")
+      return
+    }
+    setPriceError(null)
+    onApply({ ...applied, search: search.trim(), minPrice, maxPrice })
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      role="search"
+      className="mb-6 space-y-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4"
+    >
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+        <input
+          type="text"
+          enterKeyHint="search"
+          aria-label="Buscar productos"
+          placeholder="Buscar por nombre o descripción..."
+          maxLength={100}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className={`${INPUT_CLASS} pl-9`}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <label className="block text-xs text-zinc-500">
+          Precio mínimo (S/)
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="0"
+            value={minPrice}
+            onChange={handlePriceChange(setMinPrice)}
+            className={`${INPUT_CLASS} mt-1`}
+          />
+        </label>
+
+        <label className="block text-xs text-zinc-500">
+          Precio máximo (S/)
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="Sin límite"
+            value={maxPrice}
+            onChange={handlePriceChange(setMaxPrice)}
+            className={`${INPUT_CLASS} mt-1`}
+          />
+        </label>
+
+        <label className="col-span-2 block text-xs text-zinc-500 md:col-span-1">
+          Ordenar por
+          <select
+            value={applied.ordering}
+            onChange={(e) => onApply({ ...applied, ordering: e.target.value })}
+            className={`${INPUT_CLASS} mt-1 [color-scheme:dark]`}
+          >
+            {ORDERING_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="submit"
+          className="bg-metal glow-purple col-span-2 self-end rounded-lg px-4 py-2 text-sm font-semibold text-white md:col-span-1"
+        >
+          Aplicar
+        </button>
+      </div>
+
+      {priceError && (
+        <p role="alert" className="text-sm text-red-300">
+          {priceError}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={applied.inStock}
+            onChange={(e) => onApply({ ...applied, inStock: e.target.checked })}
+            className="h-4 w-4 accent-purple-600"
+          />
+          Solo con stock
+        </label>
+
+        {hasActive && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="inline-flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-purple-400"
+          >
+            <X className="h-4 w-4" />
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+    </form>
+  )
+}
+
 export default function Catalog() {
   const [searchParams, setSearchParams] = useSearchParams()
   const categorySlug = searchParams.get("category") ?? ""
   const page = Math.max(1, Math.floor(Number(searchParams.get("page"))) || 1)
-  const queryKey = `${categorySlug}|${page}`
+
+  // Filtros leídos de la URL (valores inválidos se ignoran)
+  const search = (searchParams.get("search") ?? "").trim().slice(0, 100)
+  const rawOrdering = searchParams.get("ordering") ?? ""
+  const ordering = VALID_ORDERINGS.includes(rawOrdering) ? rawOrdering : ""
+  const minPrice = cleanPrice(searchParams.get("min_price"))
+  const maxPrice = cleanPrice(searchParams.get("max_price"))
+  const inStock = searchParams.get("in_stock") === "true"
+
+  const applied: Filters = { search, ordering, minPrice, maxPrice, inStock }
+  const hasActiveFilters = search !== "" || ordering !== "" || minPrice !== "" || maxPrice !== "" || inStock
+  const hasResultFilters = search !== "" || minPrice !== "" || maxPrice !== "" || inStock
+
+  const queryKey = [categorySlug, page, search, ordering, minPrice, maxPrice, inStock].join("|")
 
   const [categories, setCategories] = useState<Category[]>([])
   const [result, setResult] = useState<CatalogResult | null>(null)
@@ -101,11 +270,19 @@ export default function Catalog() {
     }
   }, [])
 
-  // Productos: se vuelve a pedir cuando cambia la categoría o la página
+  // Productos: se vuelve a pedir cuando cambia cualquier parte de la consulta
   useEffect(() => {
     let cancelled = false
 
-    getProducts({ page, category_slug: categorySlug || undefined })
+    getProducts({
+      page,
+      category_slug: categorySlug || undefined,
+      search: search || undefined,
+      ordering: ordering || undefined,
+      min_price: minPrice ? Number(minPrice) : undefined,
+      max_price: maxPrice ? Number(maxPrice) : undefined,
+      in_stock: inStock || undefined,
+    })
       .then((data) => {
         if (cancelled) return
         setResult({
@@ -138,13 +315,38 @@ export default function Catalog() {
     return () => {
       cancelled = true
     }
-  }, [categorySlug, page, queryKey])
+  }, [categorySlug, page, search, ordering, minPrice, maxPrice, inStock, queryKey])
 
-  const selectCategory = (slug: string) => {
-    const next = new URLSearchParams()
-    if (slug) next.set("category", slug) // al cambiar de categoría se vuelve a la página 1
+  // Cambia parámetros de la URL conservando el resto; por defecto vuelve a la página 1
+  const updateParams = (changes: Record<string, string | undefined>, resetPage = true) => {
+    const next = new URLSearchParams(searchParams)
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value)
+      else next.delete(key)
+    }
+    if (resetPage) next.delete("page")
     setSearchParams(next)
   }
+
+  const selectCategory = (slug: string) => updateParams({ category: slug || undefined })
+
+  const applyFilters = (filters: Filters) =>
+    updateParams({
+      search: filters.search || undefined,
+      ordering: filters.ordering || undefined,
+      min_price: filters.minPrice || undefined,
+      max_price: filters.maxPrice || undefined,
+      in_stock: filters.inStock ? "true" : undefined,
+    })
+
+  const clearFilters = () =>
+    updateParams({
+      search: undefined,
+      ordering: undefined,
+      min_price: undefined,
+      max_price: undefined,
+      in_stock: undefined,
+    })
 
   const goToPage = (target: number) => {
     const next = new URLSearchParams(searchParams)
@@ -174,6 +376,7 @@ export default function Catalog() {
           <p className="mt-1 text-sm text-zinc-500">
             {total} {total === 1 ? "producto" : "productos"}
             {selectedCategory && ` en ${selectedCategory.name}`}
+            {search && ` para "${search}"`}
           </p>
         )}
       </header>
@@ -208,6 +411,16 @@ export default function Catalog() {
 
         {/* Contenido */}
         <div className="min-w-0 flex-1">
+          {/* Se vuelve a montar solo si cambian el texto o los precios aplicados
+              (limpiar filtros, botón Atrás); así el borrador siempre coincide con la URL */}
+          <FiltersBar
+            key={`${search}|${minPrice}|${maxPrice}`}
+            applied={applied}
+            hasActive={hasActiveFilters}
+            onApply={applyFilters}
+            onClear={clearFilters}
+          />
+
           {loading && (
             <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-zinc-400">
               <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
@@ -231,9 +444,22 @@ export default function Catalog() {
           )}
 
           {!loading && result && !result.error && result.products.length === 0 && (
-            <p className="py-20 text-center text-zinc-500">
-              No hay productos en esta categoría todavía.
-            </p>
+            <div className="flex flex-col items-center gap-4 py-20 text-center">
+              <p className="text-zinc-500">
+                {hasResultFilters
+                  ? "No encontramos productos con esos filtros."
+                  : "No hay productos en esta categoría todavía."}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="rounded-md border border-purple-600 bg-black px-4 py-2 text-sm font-semibold text-purple-400 transition-colors hover:bg-purple-900/20"
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </div>
           )}
 
           {!loading && result && result.products.length > 0 && (
