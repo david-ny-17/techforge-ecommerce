@@ -13,6 +13,7 @@ import type {
   Category,
   CheckoutPayload,
   CheckoutResponse,
+  Order,
   PaginatedResponse,
   Product,
   RegisterData,
@@ -141,6 +142,12 @@ export async function getProfile(): Promise<User> {
 
 export async function processCheckout(orderData: CheckoutPayload): Promise<CheckoutResponse> {
   const { data } = await api.post<CheckoutResponse>("checkout/", orderData)
+  return data
+}
+
+// El backend pagina el historial (12 por página), igual que el catálogo
+export async function getOrders(page?: number): Promise<PaginatedResponse<Order>> {
+  const { data } = await api.get<PaginatedResponse<Order>>("orders/", { params: { page } })
   return data
 }
 

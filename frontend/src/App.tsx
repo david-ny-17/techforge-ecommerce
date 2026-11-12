@@ -10,6 +10,7 @@ import Checkout from "@/pages/Checkout"
 import Home from "@/pages/Home"
 import Login from "@/pages/Login"
 import OrderSuccess from "@/pages/OrderSuccess"
+import Orders from "@/pages/Orders"
 import ProductDetail from "@/pages/ProductDetail"
 import Profile from "@/pages/Profile"
 import Register from "@/pages/Register"
@@ -33,6 +34,7 @@ export default function App() {
               {/* Rutas protegidas */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/orders" element={<Orders />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/order-success" element={<OrderSuccess />} />
               </Route>

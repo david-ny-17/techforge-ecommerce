@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
 import { Link, NavLink, useNavigate } from "react-router-dom"
-import { Cpu, LogOut, Menu, ShoppingCart, User, X } from "lucide-react"
+import { Cpu, LogOut, Menu, Package, ShoppingCart, User, X } from "lucide-react"
 
 import CartSidebar from "@/components/CartSidebar"
 import { useAuth } from "@/context/useAuth"
@@ -65,6 +65,16 @@ export default function Navbar() {
             <div className="hidden items-center gap-2 md:flex">
               {user ? (
                 <>
+                  <Link
+                    to="/orders"
+                    aria-label="Mis pedidos"
+                    title="Mis pedidos"
+                    className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-300 transition-colors hover:bg-zinc-900 hover:text-purple-500"
+                  >
+                    <Package className="h-5 w-5 shrink-0" />
+                    <span className="hidden lg:inline">Mis pedidos</span>
+                  </Link>
+                  
                   <Link
                     to="/profile"
                     className="flex max-w-[11rem] items-center gap-2 rounded-md px-2 py-2 text-sm text-gray-300 transition-colors hover:bg-zinc-900 hover:text-purple-500"
@@ -147,6 +157,9 @@ export default function Navbar() {
 
             {user ? (
               <>
+                <NavLink to="/orders" className={mobileLinkClass} onClick={() => setOpen(false)}>
+                  Mis pedidos
+                </NavLink>
                 <NavLink to="/profile" className={mobileLinkClass} onClick={() => setOpen(false)}>
                   Mi cuenta ({displayName})
                 </NavLink>

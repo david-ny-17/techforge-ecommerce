@@ -1,3 +1,6 @@
+import { Package } from "lucide-react"
+import { Link } from "react-router-dom"
+
 import { useAuth } from "@/context/useAuth"
 
 export default function Profile() {
@@ -30,6 +33,14 @@ export default function Profile() {
           </div>
         ))}
       </dl>
+
+      <Link
+        to="/orders"
+        className="mt-6 inline-flex items-center gap-2 rounded-lg border border-purple-600 bg-black px-6 py-3 font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
+      >
+        <Package className="h-5 w-5" />
+        Ver mis pedidos
+      </Link>
     </section>
   )
 }
