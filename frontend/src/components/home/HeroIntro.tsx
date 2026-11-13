@@ -1,17 +1,20 @@
-import { ArrowRight, ChevronDown } from "lucide-react"
+import { ChevronsRight } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
-import { Link } from "react-router-dom"
 
 import AnimatedText from "@/components/home/AnimatedText"
 
 const GRID_LINE = "rgb(139 47 232 / 0.14)"
 const GRID_MASK = "radial-gradient(ellipse at center, black 25%, transparent 72%)"
 
-export default function HeroIntro() {
+interface HeroIntroProps {
+  onSkip?: () => void
+}
+
+export default function HeroIntro({ onSkip }: HeroIntroProps) {
   const reduceMotion = useReducedMotion()
 
   return (
-    <section className="relative flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden bg-black px-4 py-16">
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-black px-4">
       {/* Fondo: cuadrícula tenue + resplandores morados que se mueven despacio */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0">
         <div
@@ -64,45 +67,21 @@ export default function HeroIntro() {
             stagger={0.025}
           />
         </p>
-
-        <motion.div
-          className="mt-10"
-          initial={reduceMotion ? false : { opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 3.2, duration: 0.6, ease: "easeOut" }}
-        >
-          <Link
-            to="/catalog"
-            className="bg-metal glow-purple inline-flex items-center gap-2 rounded-lg px-8 py-3 text-lg font-bold text-white"
-          >
-            Explorar catálogo
-            <ArrowRight className="h-5 w-5" />
-          </Link>
-        </motion.div>
       </div>
 
+      {onSkip && (
         <motion.button
           type="button"
-          aria-label="Ir a las categorías"
-          onClick={() =>
-           document
-             .getElementById("showcase")
-             ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" })
-          }
-          className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 text-purple-400 transition-colors hover:text-purple-300"
-          initial={reduceMotion ? false : { opacity: 0 }}
+          onClick={onSkip}
+          className="absolute bottom-6 right-6 z-10 inline-flex items-center gap-1 rounded-md px-3 py-2 text-xs font-medium uppercase tracking-[0.25em] text-zinc-500 transition-colors hover:text-purple-300 sm:bottom-8 sm:right-8"
+          initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 3.8, duration: 0.6 }}
+          transition={{ delay: 0.8, duration: 0.6 }}
         >
-          <motion.span
-            className="block"
-            animate={reduceMotion ? undefined : { y: [0, 8, 0] }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <ChevronDown className="h-8 w-8" />
-          </motion.span>
+          Saltar intro
+          <ChevronsRight className="h-4 w-4" />
         </motion.button>
-
-    </section>
+      )}
+    </div>
   )
 }
