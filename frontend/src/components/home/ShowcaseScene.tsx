@@ -105,7 +105,7 @@ function Podium() {
 
   useFrame((state) => {
     if (ringMaterial.current) {
-      ringMaterial.current.emissiveIntensity = 1.8 + Math.sin(state.clock.elapsedTime * 2) * 0.6
+      ringMaterial.current.emissiveIntensity = 1.2 + Math.sin(state.clock.elapsedTime * 2) * 0.4
     }
   })
 
@@ -121,7 +121,7 @@ function Podium() {
           ref={ringMaterial}
           color="#8b2fe8"
           emissive="#8b2fe8"
-          emissiveIntensity={2}
+          emissiveIntensity={1.4}
         />
       </mesh>
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -129,7 +129,7 @@ function Podium() {
         <meshBasicMaterial
           color="#8b2fe8"
           transparent
-          opacity={0.18}
+          opacity={0.08}
           blending={AdditiveBlending}
           depthWrite={false}
         />

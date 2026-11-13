@@ -167,7 +167,7 @@ export default function CategoryShowcase() {
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 flex items-center justify-center pb-28"
         >
-          <span className="text-metal select-none text-[20vw] font-black leading-none tracking-tighter opacity-[0.14]">
+          <span className="text-metal select-none whitespace-nowrap text-[15vw] font-black leading-none tracking-tighter opacity-[0.14]">
             TECHFORGE
           </span>
         </div>

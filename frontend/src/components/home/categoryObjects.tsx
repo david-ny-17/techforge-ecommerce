@@ -4,7 +4,7 @@ import { MeshStandardMaterial } from "three"
 import type { ObjectKind } from "@/components/home/showcase-data"
 
 const MATERIALS = {
-  dark: new MeshStandardMaterial({ color: "#16161d", metalness: 0.92, roughness: 0.28 }),
+  dark: new MeshStandardMaterial({ color: "#2a2a38", metalness: 0.75, roughness: 0.36 }),
   silver: new MeshStandardMaterial({ color: "#b8b8c8", metalness: 1, roughness: 0.22 }),
   accent: new MeshStandardMaterial({
     color: "#5b19a0",
