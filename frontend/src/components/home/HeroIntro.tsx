@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, ChevronDown } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { Link } from "react-router-dom"
 
@@ -80,6 +80,29 @@ export default function HeroIntro() {
           </Link>
         </motion.div>
       </div>
+
+        <motion.button
+          type="button"
+          aria-label="Ir a las categorías"
+          onClick={() =>
+           document
+             .getElementById("showcase")
+             ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" })
+          }
+          className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 text-purple-400 transition-colors hover:text-purple-300"
+          initial={reduceMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 3.8, duration: 0.6 }}
+        >
+          <motion.span
+            className="block"
+            animate={reduceMotion ? undefined : { y: [0, 8, 0] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <ChevronDown className="h-8 w-8" />
+          </motion.span>
+        </motion.button>
+
     </section>
   )
 }
