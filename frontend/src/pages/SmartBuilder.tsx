@@ -1,14 +1,15 @@
-import { Bot, Send, Sparkles } from "lucide-react"
+import { Bot, Check, Send, ShoppingCart, Sparkles } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import type { FormEvent, KeyboardEvent } from "react"
+import { Link } from "react-router-dom"
 
 import ProductCard from "@/components/ProductCard"
+import { useCart } from "@/context/useCart"
 import { parseSmartBuilderError } from "@/lib/errors"
 import { formatPrice } from "@/lib/format"
 import { askSmartBuilder } from "@/services/api"
 import type { Product, SmartBuilderResponse } from "@/types"
 
-// Deben coincidir con las validaciones del backend (SmartBuilderRequestSerializer)
 const MIN_LENGTH = 10
 const MAX_LENGTH = 600
 
@@ -26,11 +27,11 @@ const LOADING_STEPS = [
   "Preparando tu configuración...",
 ]
 
-// Suma en centavos para evitar errores de coma flotante
 const sumPrices = (products: Product[]) =>
   products.reduce((sum, p) => sum + Math.round(Number(p.price) * 100), 0) / 100
 
 export default function SmartBuilder() {
+  const { cart, addToCart } = useCart()
   const [prompt, setPrompt] = useState("")
   const [submittedPrompt, setSubmittedPrompt] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -84,6 +85,21 @@ export default function SmartBuilder() {
   }
 
   const canSubmit = !loading && prompt.trim().length >= MIN_LENGTH
+
+  // ---------- "Añadir todo al carrito" ----------
+  // Solo cuentan los productos con stock; y solo se añaden los que aún no están
+  // en el carrito (así, pulsar el botón dos veces no duplica cantidades).
+  const recommended = result?.products ?? []
+  const availableProducts = recommended.filter((p) => p.stock > 0)
+  const missingInCart = availableProducts.filter(
+    (p) => !cart.some((item) => item.id === p.id)
+  )
+  const outOfStockCount = recommended.length - availableProducts.length
+  const allInCart = availableProducts.length > 0 && missingInCart.length === 0
+
+  const handleAddAll = () => {
+    missingInCart.forEach((product) => addToCart(product, 1))
+  }
 
   return (
     <div className="bg-[radial-gradient(ellipse_at_top,rgb(139_47_232/0.16),transparent_60%)]">
@@ -214,15 +230,67 @@ export default function SmartBuilder() {
                   </p>
 
                   {result.products.length > 0 && (
-                    <div className="flex items-end justify-between gap-4 border-t border-zinc-800 px-5 py-4">
-                      <span className="text-sm text-zinc-400">
-                        Total estimado{" "}
-                        <span className="text-zinc-600">(1 unidad de cada producto)</span>
-                      </span>
-                      <span className="text-metal text-2xl font-bold">
-                        {formatPrice(sumPrices(result.products))}
-                      </span>
-                    </div>
+                    <>
+                      <div className="flex items-end justify-between gap-4 border-t border-zinc-800 px-5 py-4">
+                        <span className="text-sm text-zinc-400">
+                          Total estimado{" "}
+                          <span className="text-zinc-600">(1 unidad de cada producto)</span>
+                        </span>
+                        <span className="text-metal text-2xl font-bold">
+                          {formatPrice(sumPrices(result.products))}
+                        </span>
+                      </div>
+
+                      {/* Añadir todo al carrito */}
+                      <div className="flex flex-col gap-3 border-t border-zinc-800 bg-zinc-900/40 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div
+                          role="status"
+                          aria-live="polite"
+                          className="text-sm text-zinc-500"
+                        >
+                          {allInCart ? (
+                            <span className="text-purple-400">
+                              Los {availableProducts.length} productos ya están en tu carrito.
+                            </span>
+                          ) : availableProducts.length === 0 ? (
+                            <span>Ningún producto recomendado tiene stock ahora mismo.</span>
+                          ) : (
+                            <span>Añade 1 unidad de cada producto con stock.</span>
+                          )}
+                          {outOfStockCount > 0 && availableProducts.length > 0 && (
+                            <span className="block text-xs text-zinc-600">
+                              {outOfStockCount === 1
+                                ? "1 producto sin stock no se añadirá."
+                                : `${outOfStockCount} productos sin stock no se añadirán.`}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          {allInCart && (
+                            <Link
+                              to="/cart"
+                              className="rounded-lg border border-purple-600 bg-black px-4 py-2.5 text-sm font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
+                            >
+                              Ir al carrito
+                            </Link>
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleAddAll}
+                            disabled={availableProducts.length === 0 || allInCart}
+                            className="bg-metal glow-purple inline-flex items-center gap-2 rounded-lg px-5 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
+                          >
+                            {allInCart ? (
+                              <Check className="h-4 w-4" />
+                            ) : (
+                              <ShoppingCart className="h-4 w-4" />
+                            )}
+                            {allInCart ? "Todo está en el carrito" : "Añadir todo al carrito"}
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </div>
 
