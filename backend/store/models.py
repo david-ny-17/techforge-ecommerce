@@ -87,6 +87,10 @@ class Order(models.Model):
         "ciudad de envío", max_length=100, blank=True, default=""
     )
 
+    payment_intent_id = models.CharField(
+        "ID del pago (Stripe)", max_length=100, blank=True, default="", db_index=True
+    )
+
     class Meta:
         verbose_name = "pedido"
         verbose_name_plural = "pedidos"

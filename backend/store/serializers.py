@@ -137,21 +137,14 @@ class CartItemSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, max_value=100)
 
 
-class PaymentInfoSerializer(serializers.Serializer):
-    card_number = serializers.CharField()
-
-    def validate_card_number(self, value):
-        digits = value.replace(" ", "").replace("-", "")
-        if not digits.isdigit() or not 13 <= len(digits) <= 19:
-            raise serializers.ValidationError("Número de tarjeta inválido.")
-        return digits
-
-
-class CheckoutSerializer(serializers.Serializer):
+class CreatePaymentIntentSerializer(serializers.Serializer):
     cart_items = CartItemSerializer(many=True, allow_empty=False)
-    payment_info = PaymentInfoSerializer()
     shipping_address = serializers.CharField(min_length=5, max_length=255)
     shipping_city = serializers.CharField(min_length=2, max_length=100)
+
+
+class ConfirmPaymentSerializer(serializers.Serializer):
+    order_id = serializers.IntegerField(min_value=1)
 
 # ---------- Smart Builder ----------
 

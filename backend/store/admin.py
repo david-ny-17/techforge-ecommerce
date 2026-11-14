@@ -52,7 +52,7 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ("id", "user", "total", "status", "shipping_city", "created_at")
+    list_display = ("id", "user", "total", "status", "shipping_city", "payment_intent_id", "created_at")
     list_filter = ("status", "created_at")
     search_fields = (
         "user__username",
@@ -60,6 +60,14 @@ class OrderAdmin(admin.ModelAdmin):
         "id",
         "shipping_city",
         "shipping_address",
+        "payment_intent_id",
     )
-    readonly_fields = ("user", "total", "created_at", "shipping_address", "shipping_city")
+    readonly_fields = (
+        "user",
+        "total",
+        "created_at",
+        "shipping_address",
+        "shipping_city",
+        "payment_intent_id",
+    )
     inlines = [OrderItemInline]
