@@ -1,5 +1,13 @@
+import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js"
+import { loadStripe } from "@stripe/stripe-js"
+import type {
+  Stripe,
+  StripeCardElementChangeEvent,
+  StripeCardElementOptions,
+  StripeElementsOptions,
+} from "@stripe/stripe-js"
 import { CreditCard, ImageOff, Loader2, Lock, MapPin } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useRef, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react"
 import { Link, Navigate, useNavigate } from "react-router-dom"
 
@@ -8,136 +16,186 @@ import { useAuth } from "@/context/useAuth"
 import { useCart } from "@/context/useCart"
 import { parseCheckoutError } from "@/lib/errors"
 import { formatPrice } from "@/lib/format"
-import { processCheckout } from "@/services/api"
+import { confirmPayment, createPaymentIntent } from "@/services/api"
+import type { Order } from "@/types"
 
-interface CheckoutForm {
-  address: string
-  city: string
-  cardNumber: string
-  expiry: string
-  cvv: string
+const PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined
+
+// Stripe.js se descarga solo cuando se abre esta página (no en todo el sitio)
+let stripePromise: Promise<Stripe | null> | null = null
+function getStripe() {
+  if (!PUBLISHABLE_KEY) return null
+  stripePromise ??= loadStripe(PUBLISHABLE_KEY)
+  return stripePromise
 }
 
-type FormErrors = Partial<Record<keyof CheckoutForm, string>>
+const ELEMENTS_OPTIONS: StripeElementsOptions = { locale: "es" }
 
-// "4242424242424242" -> "4242 4242 4242 4242"
-const formatCardNumber = (value: string) =>
-  value
-    .replace(/\D/g, "")
-    .slice(0, 16)
-    .replace(/(\d{4})(?=\d)/g, "$1 ")
-
-// "1228" -> "12/28"
-const formatExpiry = (value: string) => {
-  const digits = value.replace(/\D/g, "").slice(0, 4)
-  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits
-}
-
-function validate(form: CheckoutForm): FormErrors {
-  const errors: FormErrors = {}
-
-  if (form.address.trim().length < 5) errors.address = "Ingresa una dirección válida."
-  if (form.city.trim().length < 2) errors.city = "Ingresa tu ciudad."
-
-  if (form.cardNumber.replace(/\D/g, "").length !== 16) {
-    errors.cardNumber = "El número de tarjeta debe tener 16 dígitos."
-  }
-
-  const match = /^(\d{2})\/(\d{2})$/.exec(form.expiry)
-  if (!match) {
-    errors.expiry = "Usa el formato MM/AA."
-  } else {
-    const month = Number(match[1])
-    const year = 2000 + Number(match[2])
-    if (month < 1 || month > 12) {
-      errors.expiry = "Mes inválido."
-    } else if (new Date(year, month, 1) <= new Date()) {
-      // new Date(year, month, 1) = primer día del mes siguiente al de vencimiento
-      errors.expiry = "La tarjeta está vencida."
-    }
-  }
-
-  if (!/^\d{3,4}$/.test(form.cvv)) errors.cvv = "El CVV debe tener 3 o 4 dígitos."
-
-  return errors
+// Estilo oscuro con acentos morados para el campo de tarjeta de Stripe
+const CARD_OPTIONS: StripeCardElementOptions = {
+  style: {
+    base: {
+      color: "#f3f4f6",
+      fontFamily: "ui-sans-serif, system-ui, sans-serif",
+      fontSize: "16px",
+      fontSmoothing: "antialiased",
+      iconColor: "#a966ff",
+      "::placeholder": { color: "#71717a" },
+    },
+    invalid: { color: "#fca5a5", iconColor: "#fca5a5" },
+  },
 }
 
 const PAYMENT_STEPS = [
-  "Encriptando transacción...",
-  "Verificando fondos...",
-  "Autorizando con la entidad bancaria...",
-  "Generando tu orden...",
+  "Creando tu pedido...",
+  "Procesando el pago con Stripe...",
+  "Confirmando tu orden...",
 ]
 
-export default function Checkout() {
+interface ShippingForm {
+  address: string
+  city: string
+}
+
+type FormErrors = Partial<Record<keyof ShippingForm, string>>
+
+// Pedido y PaymentIntent ya creados: si el pago falla, se reutilizan al reintentar
+interface PaymentSession {
+  orderId: number
+  clientSecret: string
+  signature: string
+}
+
+function validate(form: ShippingForm): FormErrors {
+  const errors: FormErrors = {}
+  if (form.address.trim().length < 5) errors.address = "Ingresa una dirección válida."
+  if (form.city.trim().length < 2) errors.city = "Ingresa tu ciudad."
+  return errors
+}
+
+function CheckoutContent() {
   const { user } = useAuth()
   const { cart, totalItems, clearCart, getCartTotal } = useCart()
   const navigate = useNavigate()
+  const stripe = useStripe()
+  const elements = useElements()
 
-  const [form, setForm] = useState<CheckoutForm>({
+  const [form, setForm] = useState<ShippingForm>({
     address: user?.address ?? "",
     city: user?.city ?? "",
-    cardNumber: "",
-    expiry: "",
-    cvv: "",
   })
   const [fieldErrors, setFieldErrors] = useState<FormErrors>({})
+  const [cardComplete, setCardComplete] = useState(false)
+  const [cardError, setCardError] = useState<string | null>(null)
+  const [cardFocused, setCardFocused] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   // Evita el rebote a /cart cuando el carrito se vacía tras pagar
   const [completed, setCompleted] = useState(false)
   const [step, setStep] = useState(0)
-
-// Avanza los mensajes mientras se procesa el pago y se detiene en el último
-  useEffect(() => {
-    if (!submitting) return
-    const timer = window.setInterval(() => {
-      setStep((prev) => Math.min(prev + 1, PAYMENT_STEPS.length - 1))
-    }, 700)
-    return () => window.clearInterval(timer)
-  }, [submitting])
+  const sessionRef = useRef<PaymentSession | null>(null)
 
   if (cart.length === 0 && !completed) {
     return <Navigate to="/cart" replace />
   }
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const field = e.target.name as keyof CheckoutForm
-    let value = e.target.value
-
-    if (field === "cardNumber") value = formatCardNumber(value)
-    if (field === "expiry") value = formatExpiry(value)
-    if (field === "cvv") value = value.replace(/\D/g, "").slice(0, 4)
-
-    setForm((prev) => ({ ...prev, [field]: value }))
+    const field = e.target.name as keyof ShippingForm
+    setForm((prev) => ({ ...prev, [field]: e.target.value }))
     setFieldErrors((prev) => ({ ...prev, [field]: undefined }))
+  }
+
+  const handleCardChange = (event: StripeCardElementChangeEvent) => {
+    setCardComplete(event.complete)
+    setCardError(event.error?.message ?? null)
+  }
+
+  const finishPayment = (order: Order) => {
+    // Pago aprobado: se vacía el carrito y se muestra la pantalla de éxito
+    setCompleted(true)
+    clearCart()
+    navigate("/order-success", { replace: true, state: { order } })
   }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (submitting) return
-
     setError(null)
+
     const errors = validate(form)
     setFieldErrors(errors)
-    if (Object.keys(errors).length > 0) return
+
+    const card = elements?.getElement(CardElement)
+    if (!stripe || !elements || !card) {
+      setError("El módulo de pago aún se está cargando. Espera un momento e inténtalo de nuevo.")
+      return
+    }
+    if (!cardComplete) setCardError("Completa los datos de tu tarjeta.")
+    if (Object.keys(errors).length > 0 || !cardComplete) return
+
+    const address = form.address.trim()
+    const city = form.city.trim()
+    const signature = JSON.stringify({
+      cart: cart.map((item) => [item.id, item.quantity]),
+      address,
+      city,
+    })
+    const fullName = user ? `${user.first_name} ${user.last_name}`.trim() : ""
 
     setSubmitting(true)
+    setStep(0)
     try {
-       const result = await processCheckout({
-        cart_items: cart.map((item) => ({ product_id: item.id, quantity: item.quantity })),
-        payment_info: { card_number: form.cardNumber.replace(/\D/g, "") },
-        shipping_address: form.address.trim(),
-        shipping_city: form.city.trim(),
+      // 1) Pedido + PaymentIntent (el total lo calcula el servidor desde la base de datos)
+      let session = sessionRef.current
+      if (!session || session.signature !== signature) {
+        const created = await createPaymentIntent({
+          cart_items: cart.map((item) => ({ product_id: item.id, quantity: item.quantity })),
+          shipping_address: address,
+          shipping_city: city,
+        })
+        session = {
+          orderId: created.order_id,
+          clientSecret: created.client_secret,
+          signature,
+        }
+        sessionRef.current = session
+      }
+
+      // 2) Los datos de la tarjeta viajan directo a Stripe, nunca a nuestro servidor
+      setStep(1)
+      const { error: stripeError } = await stripe.confirmCardPayment(session.clientSecret, {
+        payment_method: {
+          card,
+          billing_details: {
+            name: fullName || undefined,
+            email: user?.email || undefined,
+          },
+        },
       })
 
-      // Pago aprobado: se vacía el carrito y se muestra la pantalla de éxito
-      setCompleted(true)
-      clearCart()
-      navigate("/order-success", {
-        replace: true,
-        state: { order: result.order },
-      })
+      if (stripeError) {
+        // El servidor registra el rechazo (el pedido queda como Fallido). Si el pago ya
+        // estaba completo (p. ej. un reintento tras un corte de red), lo recupera aquí.
+        const recovered = await confirmPayment(session.orderId).catch(() => null)
+        if (recovered?.order.status === "PAID") {
+          finishPayment(recovered.order)
+          return
+        }
+        setError(stripeError.message ?? "No se pudo procesar el pago.")
+        setSubmitting(false)
+        return
+      }
+
+      // 3) El servidor verifica con Stripe que el pago esté completo (no se confía en el navegador)
+      setStep(2)
+      const result = await confirmPayment(session.orderId)
+      if (result.order.status !== "PAID") {
+        setError(result.detail)
+        setSubmitting(false)
+        return
+      }
+
+      finishPayment(result.order)
     } catch (err) {
       // Pago rechazado u otro error: el carrito se conserva para reintentar
       setError(parseCheckoutError(err))
@@ -171,7 +229,7 @@ export default function Checkout() {
                 <Lock className="absolute inset-0 m-auto h-6 w-6 text-purple-400" />
               </div>
               <p className="font-mono text-xs uppercase tracking-widest text-purple-500">
-                Pasarela segura
+                Pago seguro con Stripe
               </p>
               <p className="font-medium text-gray-100">{PAYMENT_STEPS[step]}</p>
               <div className="h-1 w-56 overflow-hidden rounded-full bg-zinc-800">
@@ -221,50 +279,34 @@ export default function Checkout() {
               </h2>
 
               <div className="mb-5 rounded-lg border border-purple-700/50 bg-purple-900/10 p-3 text-xs leading-relaxed text-purple-300">
-                <strong className="font-semibold">Modo de pruebas.</strong> Usa la tarjeta{" "}
-                <span className="font-mono">4242 4242 4242 4242</span> para aprobar el pago.
-                Cualquier otro número será rechazado. Fecha futura y CVV de 3 dígitos.
+                <strong className="font-semibold">Modo de pruebas (Stripe).</strong> Usa la
+                tarjeta <span className="font-mono">4242 4242 4242 4242</span>, una fecha futura
+                (por ejemplo <span className="font-mono">12/34</span>), cualquier CVC de 3
+                dígitos y cualquier código postal (por ejemplo{" "}
+                <span className="font-mono">12345</span>).
               </div>
 
-              <div className="space-y-5">
-                <FormField
-                  label="Número de tarjeta"
-                  name="cardNumber"
-                  inputMode="numeric"
-                  autoComplete="cc-number"
-                  placeholder="0000 0000 0000 0000"
-                  value={form.cardNumber}
-                  onChange={handleChange}
-                  error={fieldErrors.cardNumber}
+              <p className="mb-1.5 text-sm font-medium text-zinc-300">Datos de la tarjeta</p>
+              <div
+                className={`rounded-lg border bg-black px-3 py-3.5 transition-colors ${
+                  cardFocused
+                    ? "border-purple-600 ring-1 ring-purple-600"
+                    : cardError
+                      ? "border-red-700"
+                      : "border-zinc-800"
+                }`}
+              >
+                <CardElement
+                  options={CARD_OPTIONS}
+                  onChange={handleCardChange}
+                  onFocus={() => setCardFocused(true)}
+                  onBlur={() => setCardFocused(false)}
                 />
-
-                <div className="grid grid-cols-2 gap-5">
-                  <FormField
-                    label="Vencimiento"
-                    name="expiry"
-                    inputMode="numeric"
-                    autoComplete="cc-exp"
-                    placeholder="MM/AA"
-                    value={form.expiry}
-                    onChange={handleChange}
-                    error={fieldErrors.expiry}
-                  />
-                  <FormField
-                    label="CVV"
-                    name="cvv"
-                    type="password"
-                    inputMode="numeric"
-                    autoComplete="cc-csc"
-                    placeholder="123"
-                    value={form.cvv}
-                    onChange={handleChange}
-                    error={fieldErrors.cvv}
-                  />
-                </div>
               </div>
+              {cardError && <p className="mt-1.5 text-sm text-red-300">{cardError}</p>}
             </div>
 
-            {/* Error del servidor (pago rechazado, stock, etc.) */}
+            {/* Error del servidor o de Stripe (pago rechazado, stock, etc.) */}
             {error && (
               <div
                 role="alert"
@@ -276,7 +318,7 @@ export default function Checkout() {
 
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !stripe}
               className="bg-metal glow-purple flex w-full items-center justify-center gap-2 rounded-lg px-6 py-4 text-lg font-bold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
             >
               {submitting ? (
@@ -346,5 +388,31 @@ export default function Checkout() {
         </aside>
       </div>
     </section>
+  )
+}
+
+export default function Checkout() {
+  const stripe = getStripe()
+
+  if (!stripe) {
+    return (
+      <section className="mx-auto max-w-xl px-4 py-16">
+        <div
+          role="alert"
+          className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300"
+        >
+          Falta configurar la clave pública de Stripe. Agrega{" "}
+          <span className="font-mono">VITE_STRIPE_PUBLISHABLE_KEY</span> en{" "}
+          <span className="font-mono">frontend\.env</span> y reinicia{" "}
+          <span className="font-mono">npm run dev</span>.
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <Elements stripe={stripe} options={ELEMENTS_OPTIONS}>
+      <CheckoutContent />
+    </Elements>
   )
 }

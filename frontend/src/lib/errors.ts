@@ -52,29 +52,26 @@ export function parseCheckoutError(err: unknown): string {
       return "Tu sesión expiró. Inicia sesión nuevamente para pagar."
     }
 
-    if (status === 400 && data && typeof data === "object") {
+    if (data && typeof data === "object") {
       const body = data as Record<string, unknown>
 
-      // Pago rechazado, stock insuficiente, producto no disponible...
+      
       if (typeof body.detail === "string") return body.detail
 
-      const cardErrors = (body.payment_info as Record<string, unknown> | undefined)
-        ?.card_number
-      if (Array.isArray(cardErrors) && cardErrors.length > 0) {
-        return cardErrors.join(" ")
-      }
-      const addressErrors = body.shipping_address as string[] | undefined
-      if (addressErrors && addressErrors.length > 0) {
-        return `Dirección de envío: ${addressErrors.join(" ")}`
-      }
+      if (status === 400) {
+        const addressErrors = body.shipping_address as string[] | undefined
+        if (addressErrors && addressErrors.length > 0) {
+          return `Dirección de envío: ${addressErrors.join(" ")}`
+        }
 
-      const cityErrors = body.shipping_city as string[] | undefined
-      if (cityErrors && cityErrors.length > 0) {
-        return `Ciudad de envío: ${cityErrors.join(" ")}`
-      }
+        const cityErrors = body.shipping_city as string[] | undefined
+        if (cityErrors && cityErrors.length > 0) {
+          return `Ciudad de envío: ${cityErrors.join(" ")}`
+        }
 
-      if (body.cart_items) {
-        return "Hay un problema con los productos de tu carrito. Revísalo e inténtalo de nuevo."
+        if (body.cart_items) {
+          return "Hay un problema con los productos de tu carrito. Revísalo e inténtalo de nuevo."
+        }
       }
     }
 

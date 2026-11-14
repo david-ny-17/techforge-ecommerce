@@ -11,10 +11,11 @@ import {
 import type {
   AuthTokens,
   Category,
-  CheckoutPayload,
-  CheckoutResponse,
   Order,
   PaginatedResponse,
+  PaymentConfirmationResponse,
+  PaymentIntentPayload,
+  PaymentIntentResponse,
   Product,
   RegisterData,
   SmartBuilderResponse,
@@ -140,8 +141,21 @@ export async function getProfile(): Promise<User> {
   return data
 }
 
-export async function processCheckout(orderData: CheckoutPayload): Promise<CheckoutResponse> {
-  const { data } = await api.post<CheckoutResponse>("checkout/", orderData)
+export async function createPaymentIntent(
+  payload: PaymentIntentPayload
+): Promise<PaymentIntentResponse> {
+  const { data } = await api.post<PaymentIntentResponse>("create-payment-intent/", payload, {
+    timeout: 30000,
+  })
+  return data
+}
+
+export async function confirmPayment(orderId: number): Promise<PaymentConfirmationResponse> {
+  const { data } = await api.post<PaymentConfirmationResponse>(
+    "confirm-payment/",
+    { order_id: orderId },
+    { timeout: 30000 }
+  )
   return data
 }
 

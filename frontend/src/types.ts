@@ -85,14 +85,18 @@ export interface Order {
   items: OrderItem[]
 }
 
-export interface CheckoutPayload {
+export interface PaymentIntentPayload {
   cart_items: { product_id: number; quantity: number }[]
-  payment_info: { card_number: string }
   shipping_address: string
   shipping_city: string
 }
 
-export interface CheckoutResponse {
+export interface PaymentIntentResponse {
+  order_id: number
+  client_secret: string
+}
+
+export interface PaymentConfirmationResponse {
   detail: string
   order: Order
 }
