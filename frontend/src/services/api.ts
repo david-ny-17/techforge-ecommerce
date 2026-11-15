@@ -18,6 +18,7 @@ import type {
   PaymentIntentResponse,
   Product,
   RegisterData,
+  SmartBuilderHistoryTurn,
   SmartBuilderResponse,
   User,
 } from "@/types"
@@ -166,11 +167,13 @@ export async function getOrders(page?: number): Promise<PaginatedResponse<Order>
 }
 
 // ---------- Smart Builder (IA) ----------
-// La IA puede tardar: se amplía el timeout solo para esta petición
-export async function askSmartBuilder(prompt: string): Promise<SmartBuilderResponse> {
+export async function askSmartBuilder(
+  prompt: string,
+  history: SmartBuilderHistoryTurn[] = []
+): Promise<SmartBuilderResponse> {
   const { data } = await api.post<SmartBuilderResponse>(
     "smart-builder/",
-    { prompt },
+    { prompt, history },
     { timeout: 90000 }
   )
   return data

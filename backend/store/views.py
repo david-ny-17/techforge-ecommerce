@@ -338,7 +338,7 @@ class SmartBuilderView(APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            result = get_pc_build_recommendation(serializer.validated_data["prompt"])
+            result = get_pc_build_recommendation(serializer.validated_data["prompt"], serializer.validated_data.get("history"))
         except AIServiceError as exc:
             return Response({"detail": str(exc)}, status=exc.status_code)
 
@@ -352,4 +352,4 @@ class SmartBuilderView(APIView):
         # El contexto con `request` es necesario para que la imagen salga con URL absoluta
         data = ProductSerializer(ordered, many=True, context={"request": request}).data
 
-        return Response({"message": result["message"], "products": data})
+        return Response({"message": result["message"], "products": data, "budget_pen": result["budget_pen"]})

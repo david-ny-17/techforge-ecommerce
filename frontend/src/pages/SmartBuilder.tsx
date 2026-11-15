@@ -1,4 +1,4 @@
-import { Bot, Check, Send, ShoppingCart, Sparkles } from "lucide-react"
+import { Bot, Check, RotateCcw, Send, ShoppingCart, Sparkles } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import type { FormEvent, KeyboardEvent } from "react"
 import { Link } from "react-router-dom"
@@ -8,15 +8,29 @@ import { useCart } from "@/context/useCart"
 import { parseSmartBuilderError } from "@/lib/errors"
 import { formatPrice } from "@/lib/format"
 import { askSmartBuilder } from "@/services/api"
-import type { Product, SmartBuilderResponse } from "@/types"
+import type { BuilderTurn, Product, SmartBuilderHistoryTurn } from "@/types"
 
+// Deben coincidir con las validaciones del backend (SmartBuilderRequestSerializer)
 const MIN_LENGTH = 10
 const MAX_LENGTH = 600
+
+// La conversación sobrevive a F5 y a cambiar de página, pero no al cerrar la pestaña
+// (los precios y el stock guardados envejecen, así que no se conservan para siempre).
+const STORAGE_KEY = "techforge_builder_chat"
+const MAX_TURNS_STORED = 6
+// Turnos anteriores que se envían a la IA (el backend aplica el mismo tope)
+const HISTORY_TURNS_SENT = 4
 
 const EXAMPLES = [
   "Quiero una PC para jugar a 1440p por 4000 soles",
   "PC para programar y editar video con presupuesto de 3000 soles",
   "Equipo económico de oficina por 1500 soles",
+]
+
+const FOLLOW_UPS = [
+  "Hazla un poco más barata",
+  "Mejora la tarjeta gráfica",
+  "Añade un monitor y un teclado",
 ]
 
 const LOADING_STEPS = [
@@ -27,18 +41,182 @@ const LOADING_STEPS = [
   "Preparando tu configuración...",
 ]
 
+// Suma en centavos para evitar errores de coma flotante
 const sumPrices = (products: Product[]) =>
   products.reduce((sum, p) => sum + Math.round(Number(p.price) * 100), 0) / 100
 
-export default function SmartBuilder() {
+function isBuilderTurn(value: unknown): value is BuilderTurn {
+  if (typeof value !== "object" || value === null) return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.id === "string" &&
+    typeof v.prompt === "string" &&
+    typeof v.message === "string" &&
+    Array.isArray(v.products)
+  )
+}
+
+// Lee la conversación guardada; si está corrupta o no existe, devuelve []
+function loadTurns(): BuilderTurn[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter(isBuilderTurn) : []
+  } catch {
+    return []
+  }
+}
+
+const toHistoryTurn = (turn: BuilderTurn): SmartBuilderHistoryTurn => ({
+  prompt: turn.prompt,
+  message: turn.message,
+  product_ids: turn.products.map((p) => p.id),
+  budget_pen: turn.budget_pen,
+})
+
+// ---------- "Añadir todo al carrito" (una barra por cada respuesta) ----------
+// Solo cuentan los productos con stock; y solo se añaden los que aún no están
+// en el carrito (así, pulsar el botón dos veces no duplica cantidades).
+function AddAllBar({ products }: { products: Product[] }) {
   const { cart, addToCart } = useCart()
+
+  const availableProducts = products.filter((p) => p.stock > 0)
+  const missingInCart = availableProducts.filter(
+    (p) => !cart.some((item) => item.id === p.id)
+  )
+  const outOfStockCount = products.length - availableProducts.length
+  const allInCart = availableProducts.length > 0 && missingInCart.length === 0
+
+  const handleAddAll = () => {
+    missingInCart.forEach((product) => addToCart(product, 1))
+  }
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-zinc-800 bg-zinc-900/40 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div role="status" aria-live="polite" className="text-sm text-zinc-500">
+        {allInCart ? (
+          <span className="text-purple-400">
+            Los {availableProducts.length} productos ya están en tu carrito.
+          </span>
+        ) : availableProducts.length === 0 ? (
+          <span>Ningún producto recomendado tiene stock ahora mismo.</span>
+        ) : (
+          <span>Añade 1 unidad de cada producto con stock.</span>
+        )}
+        {outOfStockCount > 0 && availableProducts.length > 0 && (
+          <span className="block text-xs text-zinc-600">
+            {outOfStockCount === 1
+              ? "1 producto sin stock no se añadirá."
+              : `${outOfStockCount} productos sin stock no se añadirán.`}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        {allInCart && (
+          <Link
+            to="/cart"
+            className="rounded-lg border border-purple-600 bg-black px-4 py-2.5 text-sm font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
+          >
+            Ir al carrito
+          </Link>
+        )}
+        <button
+          type="button"
+          onClick={handleAddAll}
+          disabled={availableProducts.length === 0 || allInCart}
+          className="bg-metal glow-purple inline-flex items-center gap-2 rounded-lg px-5 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
+        >
+          {allInCart ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+          {allInCart ? "Todo está en el carrito" : "Añadir todo al carrito"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Respuesta de la IA (un turno) ----------
+function TurnAnswer({ turn }: { turn: BuilderTurn }) {
+  return (
+    <>
+      <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
+        <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-5 py-3">
+          <Bot className="h-4 w-4 text-purple-500" />
+          <span className="font-mono text-xs uppercase tracking-widest text-purple-500">
+            TechForge AI
+          </span>
+        </div>
+
+        <p className="whitespace-pre-line px-5 py-4 leading-relaxed text-zinc-200">
+          {turn.message}
+        </p>
+
+        {turn.products.length > 0 && (
+          <>
+            <div className="flex items-end justify-between gap-4 border-t border-zinc-800 px-5 py-4">
+              <span className="text-sm text-zinc-400">
+                Total estimado <span className="text-zinc-600">(1 unidad de cada producto)</span>
+              </span>
+              <span className="text-metal text-2xl font-bold">
+                {formatPrice(sumPrices(turn.products))}
+              </span>
+            </div>
+            <AddAllBar products={turn.products} />
+          </>
+        )}
+      </div>
+
+      {turn.products.length > 0 && (
+        <div>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-purple-500">
+            Componentes recomendados ({turn.products.length})
+          </h2>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {turn.products.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+function UserBubble({ text }: { text: string }) {
+  return (
+    <div className="flex justify-end">
+      <p className="max-w-[85%] whitespace-pre-line rounded-2xl rounded-br-sm border border-purple-700/50 bg-purple-900/20 px-4 py-3 text-sm text-gray-100">
+        {text}
+      </p>
+    </div>
+  )
+}
+
+export default function SmartBuilder() {
+  const [turns, setTurns] = useState<BuilderTurn[]>(loadTurns)
   const [prompt, setPrompt] = useState("")
-  const [submittedPrompt, setSubmittedPrompt] = useState<string | null>(null)
+  // Consulta en curso (o que falló): aún no es un turno completo
+  const [pending, setPending] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<SmartBuilderResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState(0)
-  const resultRef = useRef<HTMLDivElement>(null)
+  const [scrollTick, setScrollTick] = useState(0)
+  const pendingRef = useRef<HTMLDivElement>(null)
+  const lastTurnRef = useRef<HTMLDivElement>(null)
+
+  // Guarda la conversación (solo turnos completos) para que sobreviva a F5
+  useEffect(() => {
+    try {
+      if (turns.length === 0) {
+        sessionStorage.removeItem(STORAGE_KEY)
+      } else {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(turns.slice(-MAX_TURNS_STORED)))
+      }
+    } catch {
+      // Si el almacenamiento falla, el chat sigue funcionando en memoria
+    }
+  }, [turns])
 
   // Rota los mensajes de carga y se queda en el último
   useEffect(() => {
@@ -49,19 +227,34 @@ export default function SmartBuilder() {
     return () => window.clearInterval(timer)
   }, [loading])
 
-  // Al llegar la respuesta, lleva la vista al resultado
+  // Al enviar o al llegar la respuesta, lleva la vista a lo nuevo
   useEffect(() => {
-    if (result) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-  }, [result])
+    if (scrollTick === 0) return
+    const target = pendingRef.current ?? lastTurnRef.current
+    target?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [scrollTick])
 
   const runQuery = async (text: string) => {
     setLoading(true)
     setError(null)
-    setResult(null)
     setStep(0)
-    setSubmittedPrompt(text)
+    setPending(text)
+    setScrollTick((tick) => tick + 1)
     try {
-      setResult(await askSmartBuilder(text))
+      const history = turns.slice(-HISTORY_TURNS_SENT).map(toHistoryTurn)
+      const response = await askSmartBuilder(text, history)
+      const newTurn: BuilderTurn = {
+        id: Date.now().toString(),
+        prompt: text,
+        message: response.message,
+        products: response.products,
+        budget_pen: response.budget_pen ?? null,
+      }
+      setTurns((prev) => [...prev, newTurn])
+      setPending(null)
+      // Vacía el cuadro solo si el usuario no escribió otra cosa mientras esperaba
+      setPrompt((current) => (current.trim() === text ? "" : current))
+      setScrollTick((tick) => tick + 1)
     } catch (err) {
       setError(parseSmartBuilderError(err))
     } finally {
@@ -84,22 +277,16 @@ export default function SmartBuilder() {
     }
   }
 
-  const canSubmit = !loading && prompt.trim().length >= MIN_LENGTH
-
-  // ---------- "Añadir todo al carrito" ----------
-  // Solo cuentan los productos con stock; y solo se añaden los que aún no están
-  // en el carrito (así, pulsar el botón dos veces no duplica cantidades).
-  const recommended = result?.products ?? []
-  const availableProducts = recommended.filter((p) => p.stock > 0)
-  const missingInCart = availableProducts.filter(
-    (p) => !cart.some((item) => item.id === p.id)
-  )
-  const outOfStockCount = recommended.length - availableProducts.length
-  const allInCart = availableProducts.length > 0 && missingInCart.length === 0
-
-  const handleAddAll = () => {
-    missingInCart.forEach((product) => addToCart(product, 1))
+  const handleReset = () => {
+    if (loading) return
+    setTurns([])
+    setPending(null)
+    setError(null)
+    setPrompt("")
   }
+
+  const hasConversation = turns.length > 0
+  const canSubmit = !loading && prompt.trim().length >= MIN_LENGTH
 
   return (
     <div className="bg-[radial-gradient(ellipse_at_top,rgb(139_47_232/0.16),transparent_60%)]">
@@ -118,7 +305,7 @@ export default function SmartBuilder() {
           </h1>
           <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-500">
             Cuéntame para qué usarás tu PC y tu presupuesto. Armaré una configuración compatible
-            con productos de nuestro catálogo.
+            con productos de nuestro catálogo y después puedes pedirme ajustes.
           </p>
         </header>
 
@@ -135,26 +322,43 @@ export default function SmartBuilder() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ej: Quiero una PC para jugar a 1440p por 4000 soles..."
+              placeholder={
+                hasConversation
+                  ? "Pide un cambio: ej. cambia la tarjeta gráfica por una más barata..."
+                  : "Ej: Quiero una PC para jugar a 1440p por 4000 soles..."
+              }
               className="w-full resize-none bg-transparent text-gray-100 outline-none placeholder:text-zinc-600"
             />
             <div className="mt-3 flex items-center justify-between gap-3">
               <span className="text-xs text-zinc-600">
                 {prompt.length}/{MAX_LENGTH}
               </span>
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className="bg-metal glow-purple inline-flex items-center gap-2 rounded-lg px-5 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
-              >
-                <Send className="h-4 w-4" />
-                Analizar
-              </button>
+              <div className="flex items-center gap-3">
+                {(hasConversation || pending !== null) && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-black px-3 py-2.5 text-sm text-zinc-400 transition-colors hover:border-purple-700 hover:text-purple-400 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Nueva conversación
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={!canSubmit}
+                  className="bg-metal glow-purple inline-flex items-center gap-2 rounded-lg px-5 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
+                >
+                  <Send className="h-4 w-4" />
+                  {hasConversation ? "Enviar" : "Analizar"}
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {EXAMPLES.map((example) => (
+            {(hasConversation ? FOLLOW_UPS : EXAMPLES).map((example) => (
               <button
                 key={example}
                 type="button"
@@ -165,148 +369,70 @@ export default function SmartBuilder() {
               </button>
             ))}
           </div>
+
+          {hasConversation && (
+            <p className="mt-3 text-center text-xs text-zinc-600">
+              Estás ajustando tu armado actual. Para una PC distinta, pulsa «Nueva conversación».
+            </p>
+          )}
+
         </form>
 
         {/* Conversación */}
-        {submittedPrompt && (
-          <div ref={resultRef} className="mt-12 scroll-mt-24 space-y-6">
-            <div className="flex justify-end">
-              <p className="max-w-[85%] whitespace-pre-line rounded-2xl rounded-br-sm border border-purple-700/50 bg-purple-900/20 px-4 py-3 text-sm text-gray-100">
-                {submittedPrompt}
-              </p>
-            </div>
-
-            {/* Cargando */}
-            {loading && (
+        {(hasConversation || pending !== null) && (
+          <div className="mt-12 space-y-12">
+            {turns.map((turn, index) => (
               <div
-                role="status"
-                aria-live="polite"
-                className="flex items-center gap-5 rounded-xl border border-purple-700/40 bg-zinc-950 p-6"
+                key={turn.id}
+                ref={index === turns.length - 1 ? lastTurnRef : undefined}
+                className="scroll-mt-24 space-y-6"
               >
-                <div className="relative h-14 w-14 shrink-0">
-                  <span className="absolute inset-0 animate-ping rounded-full bg-purple-600/30" />
-                  <span className="absolute inset-0 animate-spin rounded-full border-2 border-purple-900 border-t-purple-500" />
-                  <Sparkles className="absolute inset-0 m-auto h-5 w-5 text-purple-400" />
-                </div>
-                <div>
-                  <p className="font-mono text-xs uppercase tracking-widest text-purple-500">
-                    Procesando
-                  </p>
-                  <p className="mt-1 text-gray-100">{LOADING_STEPS[step]}</p>
-                </div>
+                <UserBubble text={turn.prompt} />
+                <TurnAnswer turn={turn} />
               </div>
-            )}
+            ))}
 
-            {/* Error */}
-            {error && (
-              <div
-                role="alert"
-                className="rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300"
-              >
-                <p>{error}</p>
-                <button
-                  type="button"
-                  onClick={() => void runQuery(submittedPrompt)}
-                  className="mt-3 rounded-md border border-purple-600 bg-black px-4 py-2 font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
-                >
-                  Reintentar
-                </button>
-              </div>
-            )}
+            {/* Consulta en curso o fallida */}
+            {pending !== null && (
+              <div ref={pendingRef} className="scroll-mt-24 space-y-6">
+                <UserBubble text={pending} />
 
-            {/* Respuesta */}
-            {result && (
-              <>
-                <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
-                  <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900 px-5 py-3">
-                    <Bot className="h-4 w-4 text-purple-500" />
-                    <span className="font-mono text-xs uppercase tracking-widest text-purple-500">
-                      TechForge AI
-                    </span>
-                  </div>
-
-                  <p className="whitespace-pre-line px-5 py-4 leading-relaxed text-zinc-200">
-                    {result.message}
-                  </p>
-
-                  {result.products.length > 0 && (
-                    <>
-                      <div className="flex items-end justify-between gap-4 border-t border-zinc-800 px-5 py-4">
-                        <span className="text-sm text-zinc-400">
-                          Total estimado{" "}
-                          <span className="text-zinc-600">(1 unidad de cada producto)</span>
-                        </span>
-                        <span className="text-metal text-2xl font-bold">
-                          {formatPrice(sumPrices(result.products))}
-                        </span>
-                      </div>
-
-                      {/* Añadir todo al carrito */}
-                      <div className="flex flex-col gap-3 border-t border-zinc-800 bg-zinc-900/40 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div
-                          role="status"
-                          aria-live="polite"
-                          className="text-sm text-zinc-500"
-                        >
-                          {allInCart ? (
-                            <span className="text-purple-400">
-                              Los {availableProducts.length} productos ya están en tu carrito.
-                            </span>
-                          ) : availableProducts.length === 0 ? (
-                            <span>Ningún producto recomendado tiene stock ahora mismo.</span>
-                          ) : (
-                            <span>Añade 1 unidad de cada producto con stock.</span>
-                          )}
-                          {outOfStockCount > 0 && availableProducts.length > 0 && (
-                            <span className="block text-xs text-zinc-600">
-                              {outOfStockCount === 1
-                                ? "1 producto sin stock no se añadirá."
-                                : `${outOfStockCount} productos sin stock no se añadirán.`}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-3">
-                          {allInCart && (
-                            <Link
-                              to="/cart"
-                              className="rounded-lg border border-purple-600 bg-black px-4 py-2.5 text-sm font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
-                            >
-                              Ir al carrito
-                            </Link>
-                          )}
-                          <button
-                            type="button"
-                            onClick={handleAddAll}
-                            disabled={availableProducts.length === 0 || allInCart}
-                            className="bg-metal glow-purple inline-flex items-center gap-2 rounded-lg px-5 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
-                          >
-                            {allInCart ? (
-                              <Check className="h-4 w-4" />
-                            ) : (
-                              <ShoppingCart className="h-4 w-4" />
-                            )}
-                            {allInCart ? "Todo está en el carrito" : "Añadir todo al carrito"}
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {result.products.length > 0 && (
-                  <div>
-                    <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-purple-500">
-                      Componentes recomendados ({result.products.length})
-                    </h2>
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-                      {result.products.map((product) => (
-                        <ProductCard key={product.id} product={product} />
-                      ))}
+                {loading && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="flex items-center gap-5 rounded-xl border border-purple-700/40 bg-zinc-950 p-6"
+                  >
+                    <div className="relative h-14 w-14 shrink-0">
+                      <span className="absolute inset-0 animate-ping rounded-full bg-purple-600/30" />
+                      <span className="absolute inset-0 animate-spin rounded-full border-2 border-purple-900 border-t-purple-500" />
+                      <Sparkles className="absolute inset-0 m-auto h-5 w-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="font-mono text-xs uppercase tracking-widest text-purple-500">
+                        Procesando
+                      </p>
+                      <p className="mt-1 text-gray-100">{LOADING_STEPS[step]}</p>
                     </div>
                   </div>
                 )}
-              </>
+
+                {error && !loading && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-300"
+                  >
+                    <p>{error}</p>
+                    <button
+                      type="button"
+                      onClick={() => void runQuery(pending)}
+                      className="mt-3 rounded-md border border-purple-600 bg-black px-4 py-2 font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

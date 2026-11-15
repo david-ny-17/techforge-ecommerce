@@ -150,3 +150,4 @@ class ConfirmPaymentSerializer(serializers.Serializer):
 
 class SmartBuilderRequestSerializer(serializers.Serializer):
     prompt = serializers.CharField(min_length=10, max_length=600, trim_whitespace=True)
+    history = serializers.ListField(child=serializers.DictField(), required=False, max_length=20)

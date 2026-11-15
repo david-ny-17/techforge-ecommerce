@@ -104,4 +104,20 @@ export interface PaymentConfirmationResponse {
 export interface SmartBuilderResponse {
   message: string
   products: Product[]
+  budget_pen: number | null
+}
+
+export interface BuilderTurn {
+  id: string
+  prompt: string
+  message: string
+  products: Product[]
+  budget_pen: number | null
+}
+
+export interface SmartBuilderHistoryTurn {
+  prompt: string
+  message: string
+  product_ids: number[]
+  budget_pen: number | null
 }
