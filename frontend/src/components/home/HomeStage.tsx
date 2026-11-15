@@ -6,9 +6,9 @@ import HeroIntro from "@/components/home/HeroIntro"
 import ShowcaseFallback from "@/components/home/ShowcaseFallback"
 import { hasWebGL } from "@/components/home/home-utils"
 
-const MOUNT_SCENE_MS = 1200 
-const WARM_UP_MS = 3500 
-const INTRO_MS = 5500 
+const MOUNT_SCENE_MS = 1200
+const WARM_UP_MS = 3500
+const INTRO_MS = 5500
 
 const session = { introPlayed: false }
 
@@ -47,11 +47,13 @@ function CinematicStage() {
         <h1 className="sr-only">TechForge: el lugar donde armarás el setup de tus sueños</h1>
       )}
 
-      {/* Carrusel 3D: espera debajo de la intro y aparece cuando esta termina */}
+      {/* Carrusel 3D: espera debajo de la intro y aparece cuando esta termina.
+          IMPORTANTE: aquí solo se anima la opacidad. Si se animara `scale`, el Canvas
+          mediría el contenedor agrandado y quedaría más grande y desplazado. */}
       <motion.div
         className="absolute inset-0 z-10"
         initial={false}
-        animate={{ opacity: revealed ? 1 : 0, scale: revealed ? 1 : 1.06 }}
+        animate={{ opacity: revealed ? 1 : 0 }}
         transition={{ duration: 1.1, ease: "easeOut" }}
         inert={!revealed}
       >
