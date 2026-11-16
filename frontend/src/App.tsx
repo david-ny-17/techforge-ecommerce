@@ -1,9 +1,13 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom"
 
+import AdminLayout from "@/components/admin/AdminLayout"
+import AdminRoute from "@/components/admin/AdminRoute"
 import Layout from "@/components/Layout"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import AuthProvider from "@/context/AuthProvider"
 import CartProvider from "@/context/CartProvider"
+import AdminDashboard from "@/pages/admin/AdminDashboard"
+import AdminSoon from "@/pages/admin/AdminSoon"
 import Cart from "@/pages/Cart"
 import Catalog from "@/pages/Catalog"
 import Checkout from "@/pages/Checkout"
@@ -39,6 +43,16 @@ export default function App() {
                 <Route path="/builds" element={<SavedBuilds />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/order-success" element={<OrderSuccess />} />
+              </Route>
+            </Route>
+
+            {/* Panel de administración: solo is_staff, con su propio diseño */}
+            <Route element={<AdminRoute />}>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/products" element={<AdminSoon title="Productos" />} />
+                <Route path="/admin/orders" element={<AdminSoon title="Pedidos" />} />
+                <Route path="/admin/customers" element={<AdminSoon title="Clientes" />} />
               </Route>
             </Route>
           </Routes>

@@ -25,6 +25,11 @@ export function parseApiError(
     return { message: "Usuario o contraseña incorrectos.", fields: {} }
   }
 
+  // Demasiados intentos de login seguidos (límite del servidor)
+  if (status === 429) {
+    return { message: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.", fields: {} }
+  }
+
   // Errores de validación de DRF: { campo: ["mensaje", ...] }
   if (status === 400 && data && typeof data === "object") {
     const fields: Record<string, string> = {}

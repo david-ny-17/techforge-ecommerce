@@ -47,6 +47,7 @@ export interface User {
   phone: string
   address: string
   city: string
+  is_staff: boolean
 }
 
 export interface AuthTokens {
@@ -137,4 +138,68 @@ export interface SavedBuildPayload {
   prompt: string
   budget: number | null
   product_ids: number[]
+}
+
+// ---------- Panel de administración ----------
+export interface AdminKpis {
+  total_sales: number
+  sales_today: number
+  paid_orders: number
+  pending_orders: number
+  customers: number
+  new_customers_today: number
+  pcs_sold: number
+  setups_sold: number
+  laptops_sold: number
+  products_active: number
+  out_of_stock: number
+}
+
+export interface AdminSalesPoint {
+  date: string // "2026-11-16"
+  total: number
+  orders: number
+}
+
+export interface AdminRankedProduct {
+  product_id: number
+  name: string
+  slug: string
+  category: string
+  units: number
+  revenue: number
+}
+
+export interface AdminRecentUser {
+  id: number
+  username: string
+  name: string
+  email: string
+  date_joined: string
+}
+
+export interface AdminRecentOrder {
+  id: number
+  customer: string
+  total: number
+  status: OrderStatus
+  created_at: string
+}
+
+export interface AdminLowStockItem {
+  id: number
+  name: string
+  stock: number
+  category: string
+}
+
+export interface AdminDashboardData {
+  generated_at: string
+  kpis: AdminKpis
+  sales_series: AdminSalesPoint[]
+  top_products: AdminRankedProduct[]
+  least_sold: AdminRankedProduct | null
+  recent_users: AdminRecentUser[]
+  recent_orders: AdminRecentOrder[]
+  low_stock: AdminLowStockItem[]
 }

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
 import { Link, NavLink, useNavigate } from "react-router-dom"
-import { Bookmark, Cpu, LogOut, Menu, Package, ShoppingCart, User, X } from "lucide-react"
+import { Bookmark, Cpu, LayoutDashboard, LogOut, Menu, Package, ShoppingCart, User, X } from "lucide-react"
 
 import CartSidebar from "@/components/CartSidebar"
 import { useAuth } from "@/context/useAuth"
@@ -65,6 +65,17 @@ export default function Navbar() {
             <div className="hidden items-center gap-2 md:flex">
               {user ? (
                 <>
+              {user.is_staff && (
+                <Link
+                  to="/admin"
+                  aria-label="Panel de administración"
+                  title="Panel de administración"
+                  className="flex items-center gap-2 rounded-md border border-purple-700/50 bg-purple-900/20 px-3 py-2 text-sm font-medium text-purple-300 transition-colors hover:bg-purple-900/40"
+                >
+                  <LayoutDashboard className="h-4 w-4 shrink-0" />
+                  <span className="hidden lg:inline">Panel admin</span>
+                </Link>
+              )}
                   <Link
                     to="/orders"
                     aria-label="Mis pedidos"
@@ -167,6 +178,12 @@ export default function Navbar() {
 
             {user ? (
               <>
+
+              {user.is_staff && (
+                <NavLink to="/admin" className={mobileLinkClass} onClick={() => setOpen(false)}>
+                  Panel de administración
+                </NavLink>
+              )}
                 <NavLink to="/orders" className={mobileLinkClass} onClick={() => setOpen(false)}>
                   Mis pedidos
                 </NavLink>

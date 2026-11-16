@@ -21,7 +21,9 @@ export default function Login() {
     (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? "/"
 
   // Si ya hay sesión (o se acaba de iniciar), redirige
-  if (!loading && user) return <Navigate to={from} replace />
+  if (!loading && user) {
+    return <Navigate to={user.is_staff && from === "/" ? "/admin" : from} replace />
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -57,7 +59,7 @@ export default function Login() {
           )}
 
           <FormField
-            label="Usuario"
+            label="Usuario o correo"
             name="username"
             autoComplete="username"
             value={username}
