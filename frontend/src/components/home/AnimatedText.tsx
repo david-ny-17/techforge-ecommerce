@@ -8,6 +8,7 @@ interface AnimatedTextProps {
   letterClassName?: string
   delay?: number
   stagger?: number
+  inView?: boolean
 }
 
 const letterVariants: Variants = {
@@ -26,6 +27,7 @@ export default function AnimatedText({
   letterClassName = "",
   delay = 0,
   stagger = 0.04,
+  inView = false,
 }: AnimatedTextProps) {
   const reduceMotion = useReducedMotion()
 
@@ -49,7 +51,9 @@ export default function AnimatedText({
       className={className}
       variants={containerVariants}
       initial="hidden"
-      animate="visible"
+      animate={inView ? undefined : "visible"}
+      whileInView={inView ? "visible" : undefined}
+      viewport={inView ? { once: true, amount: 0.5 } : undefined}
     >
       {/* Los lectores de pantalla leen el texto completo, no letra por letra */}
       <span className="sr-only">{text}</span>

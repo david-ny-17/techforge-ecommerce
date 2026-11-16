@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { useCallback, useEffect, useState } from "react"
 
+import AssistantTeaser from "@/components/home/AssistantTeaser"
 import CategoryShowcase from "@/components/home/CategoryShowcase"
 import HeroIntro from "@/components/home/HeroIntro"
 import ShowcaseFallback from "@/components/home/ShowcaseFallback"
@@ -73,6 +74,9 @@ function CinematicStage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Aviso pequeño del asistente: sale tarde y no tapa el 3D (ver AssistantTeaser) */}
+      <AssistantTeaser revealed={revealed} />
     </section>
   )
 }
