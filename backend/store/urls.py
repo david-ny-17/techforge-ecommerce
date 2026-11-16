@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+from .saved_builds import SavedBuildViewSet
 from .views import (
     CategoryViewSet,
     ConfirmPaymentView,
@@ -16,6 +17,7 @@ from .views import (
 router = DefaultRouter()
 router.register("categories", CategoryViewSet, basename="category")
 router.register("products", ProductViewSet, basename="product")
+router.register("builds", SavedBuildViewSet, basename="saved-build")
 
 urlpatterns = [
     # Autenticación
@@ -28,6 +30,6 @@ urlpatterns = [
     path("confirm-payment/", ConfirmPaymentView.as_view(), name="confirm-payment"),
     path("orders/", OrderHistoryView.as_view(), name="order-history"),
     path("smart-builder/", SmartBuilderView.as_view(), name="smart-builder"),
-    # Catálogo
+    # Catálogo y armados guardados
     path("", include(router.urls)),
 ]

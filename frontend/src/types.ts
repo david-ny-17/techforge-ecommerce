@@ -113,6 +113,7 @@ export interface BuilderTurn {
   message: string
   products: Product[]
   budget_pen: number | null
+  saved?: boolean
 }
 
 export interface SmartBuilderHistoryTurn {
@@ -120,4 +121,20 @@ export interface SmartBuilderHistoryTurn {
   message: string
   product_ids: number[]
   budget_pen: number | null
+}
+
+export interface SavedBuild {
+  id: number
+  name: string
+  prompt: string
+  budget: string | null
+  products: Product[]
+  created_at: string
+}
+
+export interface SavedBuildPayload {
+  name: string
+  prompt: string
+  budget: number | null
+  product_ids: number[]
 }

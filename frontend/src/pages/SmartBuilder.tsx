@@ -1,14 +1,16 @@
-import { Bot, Check, RotateCcw, Send, ShoppingCart, Sparkles } from "lucide-react"
+import { Bookmark, Bot, Check, RotateCcw, Send, Sparkles } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import type { FormEvent, KeyboardEvent } from "react"
 import { Link } from "react-router-dom"
 
+import AddAllBar from "@/components/AddAllBar"
 import ProductCard from "@/components/ProductCard"
-import { useCart } from "@/context/useCart"
-import { parseSmartBuilderError } from "@/lib/errors"
+import { useAuth } from "@/context/useAuth"
+import { defaultBuildName, sumPrices } from "@/lib/build-utils"
+import { parseSavedBuildError, parseSmartBuilderError } from "@/lib/errors"
 import { formatPrice } from "@/lib/format"
-import { askSmartBuilder } from "@/services/api"
-import type { BuilderTurn, Product, SmartBuilderHistoryTurn } from "@/types"
+import { askSmartBuilder, createSavedBuild } from "@/services/api"
+import type { BuilderTurn, SmartBuilderHistoryTurn } from "@/types"
 
 // Deben coincidir con las validaciones del backend (SmartBuilderRequestSerializer)
 const MIN_LENGTH = 10
@@ -16,6 +18,7 @@ const MAX_LENGTH = 600
 
 // La conversación sobrevive a F5 y a cambiar de página, pero no al cerrar la pestaña
 // (los precios y el stock guardados envejecen, así que no se conservan para siempre).
+// Para conservar un armado a largo plazo está "Guardar armado".
 const STORAGE_KEY = "techforge_builder_chat"
 const MAX_TURNS_STORED = 6
 // Turnos anteriores que se envían a la IA (el backend aplica el mismo tope)
@@ -40,10 +43,6 @@ const LOADING_STEPS = [
   "Optimizando tu presupuesto...",
   "Preparando tu configuración...",
 ]
-
-// Suma en centavos para evitar errores de coma flotante
-const sumPrices = (products: Product[]) =>
-  products.reduce((sum, p) => sum + Math.round(Number(p.price) * 100), 0) / 100
 
 function isBuilderTurn(value: unknown): value is BuilderTurn {
   if (typeof value !== "object" || value === null) return false
@@ -75,69 +74,148 @@ const toHistoryTurn = (turn: BuilderTurn): SmartBuilderHistoryTurn => ({
   budget_pen: turn.budget_pen,
 })
 
-// ---------- "Añadir todo al carrito" (una barra por cada respuesta) ----------
-// Solo cuentan los productos con stock; y solo se añaden los que aún no están
-// en el carrito (así, pulsar el botón dos veces no duplica cantidades).
-function AddAllBar({ products }: { products: Product[] }) {
-  const { cart, addToCart } = useCart()
+// ---------- "Guardar armado" (una barra por cada respuesta) ----------
+function SaveBuildBar({
+  turn,
+  onSaved,
+}: {
+  turn: BuilderTurn
+  onSaved: (turnId: string) => void
+}) {
+  const { user } = useAuth()
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(() => defaultBuildName(turn.prompt))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const availableProducts = products.filter((p) => p.stock > 0)
-  const missingInCart = availableProducts.filter(
-    (p) => !cart.some((item) => item.id === p.id)
-  )
-  const outOfStockCount = products.length - availableProducts.length
-  const allInCart = availableProducts.length > 0 && missingInCart.length === 0
+  const handleSave = async () => {
+    const trimmed = name.trim()
+    if (!trimmed || saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await createSavedBuild({
+        name: trimmed,
+        prompt: turn.prompt,
+        budget:
+          typeof turn.budget_pen === "number" ? Math.round(turn.budget_pen * 100) / 100 : null,
+        product_ids: turn.products.map((p) => p.id),
+      })
+      onSaved(turn.id)
+    } catch (err) {
+      setError(parseSavedBuildError(err))
+    } finally {
+      setSaving(false)
+    }
+  }
 
-  const handleAddAll = () => {
-    missingInCart.forEach((product) => addToCart(product, 1))
+  const rowClass =
+    "flex flex-col gap-3 border-t border-zinc-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+  const linkClass =
+    "rounded-lg border border-purple-600 bg-black px-4 py-2.5 text-sm font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
+
+  if (turn.saved) {
+    return (
+      <div className={rowClass}>
+        <span className="flex items-center gap-2 text-sm text-purple-400">
+          <Check className="h-4 w-4" />
+          Armado guardado en tu cuenta.
+        </span>
+        <Link to="/builds" className={linkClass}>
+          Ver mis armados
+        </Link>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className={rowClass}>
+        <span className="text-sm text-zinc-500">
+          Inicia sesión para guardar este armado y consultarlo cuando quieras.
+        </span>
+        <Link to="/login" className={linkClass}>
+          Iniciar sesión
+        </Link>
+      </div>
+    )
+  }
+
+  if (!editing) {
+    return (
+      <div className={rowClass}>
+        <span className="text-sm text-zinc-500">
+          Guarda este armado para consultarlo cuando quieras.
+        </span>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="inline-flex items-center gap-2 rounded-lg border border-purple-600 bg-black px-4 py-2.5 text-sm font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
+        >
+          <Bookmark className="h-4 w-4" />
+          Guardar armado
+        </button>
+      </div>
+    )
   }
 
   return (
-    <div className="flex flex-col gap-3 border-t border-zinc-800 bg-zinc-900/40 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-      <div role="status" aria-live="polite" className="text-sm text-zinc-500">
-        {allInCart ? (
-          <span className="text-purple-400">
-            Los {availableProducts.length} productos ya están en tu carrito.
-          </span>
-        ) : availableProducts.length === 0 ? (
-          <span>Ningún producto recomendado tiene stock ahora mismo.</span>
-        ) : (
-          <span>Añade 1 unidad de cada producto con stock.</span>
-        )}
-        {outOfStockCount > 0 && availableProducts.length > 0 && (
-          <span className="block text-xs text-zinc-600">
-            {outOfStockCount === 1
-              ? "1 producto sin stock no se añadirá."
-              : `${outOfStockCount} productos sin stock no se añadirán.`}
-          </span>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3">
-        {allInCart && (
-          <Link
-            to="/cart"
-            className="rounded-lg border border-purple-600 bg-black px-4 py-2.5 text-sm font-semibold text-purple-400 transition-colors hover:bg-purple-900/20 hover:text-purple-300"
+    <div className="border-t border-zinc-800 px-5 py-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void handleSave()
+        }}
+        className="flex flex-col gap-3 sm:flex-row sm:items-center"
+      >
+        <label htmlFor={`build-name-${turn.id}`} className="sr-only">
+          Nombre del armado
+        </label>
+        <input
+          id={`build-name-${turn.id}`}
+          type="text"
+          value={name}
+          maxLength={100}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Nombre del armado"
+          className="w-full flex-1 rounded-lg border border-zinc-800 bg-black px-3 py-2.5 text-sm text-gray-100 outline-none transition-colors placeholder:text-zinc-600 focus:border-purple-600"
+        />
+        <div className="flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={saving || name.trim().length === 0}
+            className="bg-metal glow-purple inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
           >
-            Ir al carrito
-          </Link>
-        )}
-        <button
-          type="button"
-          onClick={handleAddAll}
-          disabled={availableProducts.length === 0 || allInCart}
-          className="bg-metal glow-purple inline-flex items-center gap-2 rounded-lg px-5 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
-        >
-          {allInCart ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
-          {allInCart ? "Todo está en el carrito" : "Añadir todo al carrito"}
-        </button>
-      </div>
+            <Bookmark className="h-4 w-4" />
+            {saving ? "Guardando..." : "Guardar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            disabled={saving}
+            className="rounded-lg border border-zinc-800 bg-black px-4 py-2.5 text-sm text-zinc-400 transition-colors hover:border-purple-700 hover:text-purple-400 disabled:opacity-40"
+          >
+            Cancelar
+          </button>
+        </div>
+      </form>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-red-300">
+          {error}
+        </p>
+      )}
     </div>
   )
 }
 
 // ---------- Respuesta de la IA (un turno) ----------
-function TurnAnswer({ turn }: { turn: BuilderTurn }) {
+function TurnAnswer({
+  turn,
+  onSaved,
+}: {
+  turn: BuilderTurn
+  onSaved: (turnId: string) => void
+}) {
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950">
@@ -163,6 +241,7 @@ function TurnAnswer({ turn }: { turn: BuilderTurn }) {
               </span>
             </div>
             <AddAllBar products={turn.products} />
+            <SaveBuildBar turn={turn} onSaved={onSaved} />
           </>
         )}
       </div>
@@ -285,6 +364,11 @@ export default function SmartBuilder() {
     setPrompt("")
   }
 
+  // Marca el turno como guardado (se conserva aunque recargues la página)
+  const handleSaved = (turnId: string) => {
+    setTurns((prev) => prev.map((t) => (t.id === turnId ? { ...t, saved: true } : t)))
+  }
+
   const hasConversation = turns.length > 0
   const canSubmit = !loading && prompt.trim().length >= MIN_LENGTH
 
@@ -375,7 +459,6 @@ export default function SmartBuilder() {
               Estás ajustando tu armado actual. Para una PC distinta, pulsa «Nueva conversación».
             </p>
           )}
-
         </form>
 
         {/* Conversación */}
@@ -388,7 +471,7 @@ export default function SmartBuilder() {
                 className="scroll-mt-24 space-y-6"
               >
                 <UserBubble text={turn.prompt} />
-                <TurnAnswer turn={turn} />
+                <TurnAnswer turn={turn} onSaved={handleSaved} />
               </div>
             ))}
 

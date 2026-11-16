@@ -18,6 +18,8 @@ import type {
   PaymentIntentResponse,
   Product,
   RegisterData,
+  SavedBuild,
+  SavedBuildPayload,
   SmartBuilderHistoryTurn,
   SmartBuilderResponse,
   User,
@@ -177,4 +179,18 @@ export async function askSmartBuilder(
     { timeout: 90000 }
   )
   return data
+}
+
+export async function getSavedBuilds(): Promise<SavedBuild[]> {
+  const { data } = await api.get<SavedBuild[]>("builds/")
+  return data
+}
+
+export async function createSavedBuild(payload: SavedBuildPayload): Promise<SavedBuild> {
+  const { data } = await api.post<SavedBuild>("builds/", payload)
+  return data
+}
+
+export async function deleteSavedBuild(id: number): Promise<void> {
+  await api.delete(`builds/${id}/`)
 }

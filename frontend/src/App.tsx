@@ -14,6 +14,7 @@ import Orders from "@/pages/Orders"
 import ProductDetail from "@/pages/ProductDetail"
 import Profile from "@/pages/Profile"
 import Register from "@/pages/Register"
+import SavedBuilds from "@/pages/SavedBuilds"
 import SmartBuilder from "@/pages/SmartBuilder"
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/orders" element={<Orders />} />
+                <Route path="/builds" element={<SavedBuilds />} />
                 <Route path="/checkout" element={<Checkout />} />
                 <Route path="/order-success" element={<OrderSuccess />} />
               </Route>

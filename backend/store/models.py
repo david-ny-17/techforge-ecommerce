@@ -63,6 +63,7 @@ class Product(models.Model):
     def __str__(self):
         return self.name
 
+
 class Order(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pendiente"
@@ -125,3 +126,35 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity} x {self.product.name}"
+
+
+class SavedBuild(models.Model):
+    """Armado del Smart Builder que el usuario guardó.
+
+    Guarda solo QUÉ productos son: el precio y el stock se leen siempre de los
+    productos reales, así que nunca quedan desactualizados.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_builds",
+        verbose_name="usuario",
+    )
+    name = models.CharField("nombre", max_length=100)
+    prompt = models.CharField("consulta original", max_length=600, blank=True)
+    budget = models.DecimalField(
+        "presupuesto", max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    products = models.ManyToManyField(
+        Product, related_name="saved_builds", verbose_name="productos"
+    )
+    created_at = models.DateTimeField("fecha de creación", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "armado guardado"
+        verbose_name_plural = "armados guardados"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.user})"

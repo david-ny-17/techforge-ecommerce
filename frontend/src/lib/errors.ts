@@ -112,3 +112,28 @@ export function parseSmartBuilderError(err: unknown): string {
 
   return parseApiError(err).message
 }
+
+// Mensajes de error al guardar un armado
+export function parseSavedBuildError(err: unknown): string {
+  if (axios.isAxiosError(err) && err.response) {
+    const { status, data } = err.response
+
+    if (status === 401) return "Tu sesión expiró. Inicia sesión nuevamente para guardar."
+
+    if (data && typeof data === "object") {
+      const body = data as Record<string, unknown>
+      const detail = body.detail
+      if (typeof detail === "string") return detail
+      if (Array.isArray(detail) && detail.length > 0) return detail.join(" ")
+
+      const nameErrors = body.name as string[] | undefined
+      if (nameErrors && nameErrors.length > 0) return `Nombre: ${nameErrors.join(" ")}`
+
+      if (body.product_ids) {
+        return "Algún producto de este armado ya no está disponible. Genera el armado de nuevo."
+      }
+    }
+  }
+
+  return parseApiError(err, "No se pudo guardar el armado. Inténtalo de nuevo.").message
+}
