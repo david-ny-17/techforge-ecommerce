@@ -18,8 +18,10 @@ class UserSerializer(serializers.ModelSerializer):
             "phone",
             "address",
             "city",
+            "is_staff",
         )
-        read_only_fields = ("id",)
+        # is_staff es de SOLO LECTURA: si no, un cliente podría hacerse administrador
+        read_only_fields = ("id", "is_staff")
 
 
 class RegisterSerializer(serializers.ModelSerializer):
