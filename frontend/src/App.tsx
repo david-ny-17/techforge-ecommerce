@@ -7,6 +7,7 @@ import ProtectedRoute from "@/components/ProtectedRoute"
 import AuthProvider from "@/context/AuthProvider"
 import CartProvider from "@/context/CartProvider"
 import AdminDashboard from "@/pages/admin/AdminDashboard"
+import AdminProducts from "@/pages/admin/AdminProducts"
 import AdminSoon from "@/pages/admin/AdminSoon"
 import Cart from "@/pages/Cart"
 import Catalog from "@/pages/Catalog"
@@ -50,7 +51,7 @@ export default function App() {
             <Route element={<AdminRoute />}>
               <Route element={<AdminLayout />}>
                 <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/products" element={<AdminSoon title="Productos" />} />
+                <Route path="/admin/products" element={<AdminProducts />} />
                 <Route path="/admin/orders" element={<AdminSoon title="Pedidos" />} />
                 <Route path="/admin/customers" element={<AdminSoon title="Clientes" />} />
               </Route>

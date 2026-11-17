@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 export interface PollingState<T> {
   data: T | null
@@ -7,19 +7,25 @@ export interface PollingState<T> {
   lastUpdated: Date | null
 }
 
+export interface PollingResult<T> extends PollingState<T> {
+  // Vuelve a consultar de inmediato (por ejemplo, justo después de guardar algo)
+  refresh: () => void
+}
+
 // Repite `fetcher` cada `intervalMs`. Cambiar `resetKey` reinicia el ciclo de inmediato.
 // Espera a que termine cada petición antes de programar la siguiente (nunca se solapan).
 export function usePolling<T>(
   fetcher: () => Promise<T>,
   intervalMs: number,
   resetKey: unknown = 0
-): PollingState<T> {
+): PollingResult<T> {
   const [state, setState] = useState<PollingState<T>>({
     data: null,
     error: false,
     loading: true,
     lastUpdated: null,
   })
+  const [refreshCount, setRefreshCount] = useState(0)
   const fetcherRef = useRef(fetcher)
 
   // Siempre se usa la versión más reciente de fetcher sin reiniciar el ciclo
@@ -69,7 +75,9 @@ export function usePolling<T>(
       window.clearTimeout(timer)
       document.removeEventListener("visibilitychange", handleVisibility)
     }
-  }, [intervalMs, resetKey])
+  }, [intervalMs, resetKey, refreshCount])
 
-  return state
+  const refresh = useCallback(() => setRefreshCount((count) => count + 1), [])
+
+  return { ...state, refresh }
 }

@@ -203,3 +203,23 @@ export interface AdminDashboardData {
   recent_orders: AdminRecentOrder[]
   low_stock: AdminLowStockItem[]
 }
+
+export interface AdminProduct {
+  id: number
+  name: string
+  slug: string
+  category: number // id de la categoría
+  category_name: string
+  category_slug: string
+  description: string
+  price: string // DRF devuelve los decimales como texto
+  stock: number
+  image: string | null // imagen subida
+  image_url: string // imagen externa
+  specifications: Record<string, string | number | boolean>
+  is_active: boolean
+  units_sold: number
+  has_orders: boolean
+  created_at: string
+  updated_at: string
+}
