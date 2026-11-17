@@ -223,3 +223,49 @@ export interface AdminProduct {
   created_at: string
   updated_at: string
 }
+
+export interface AdminOrderItem {
+  id: number
+  product: number
+  product_name: string
+  product_slug: string
+  category: string
+  quantity: number
+  unit_price: string
+  subtotal: string
+}
+
+export interface AdminOrderCustomer {
+  id: number
+  username: string
+  name: string
+  email: string
+}
+
+export interface AdminOrder {
+  id: number
+  customer: AdminOrderCustomer
+  total: string
+  status: OrderStatus
+  created_at: string
+  shipping_address: string
+  shipping_city: string
+  items_count: number
+  items: AdminOrderItem[]
+}
+
+export interface AdminCustomer {
+  id: number
+  username: string
+  email: string
+  first_name: string
+  last_name: string
+  full_name: string
+  phone: string
+  city: string
+  date_joined: string
+  last_login: string | null
+  is_active: boolean
+  orders_count: number // pedidos pagados
+  total_spent: number // soles gastados en pedidos pagados
+}

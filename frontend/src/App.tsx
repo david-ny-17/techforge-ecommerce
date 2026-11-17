@@ -6,9 +6,10 @@ import Layout from "@/components/Layout"
 import ProtectedRoute from "@/components/ProtectedRoute"
 import AuthProvider from "@/context/AuthProvider"
 import CartProvider from "@/context/CartProvider"
+import AdminCustomers from "@/pages/admin/AdminCustomers"
 import AdminDashboard from "@/pages/admin/AdminDashboard"
+import AdminOrders from "@/pages/admin/AdminOrders"
 import AdminProducts from "@/pages/admin/AdminProducts"
-import AdminSoon from "@/pages/admin/AdminSoon"
 import Cart from "@/pages/Cart"
 import Catalog from "@/pages/Catalog"
 import Checkout from "@/pages/Checkout"
@@ -52,8 +53,8 @@ export default function App() {
               <Route element={<AdminLayout />}>
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/products" element={<AdminProducts />} />
-                <Route path="/admin/orders" element={<AdminSoon title="Pedidos" />} />
-                <Route path="/admin/customers" element={<AdminSoon title="Clientes" />} />
+                <Route path="/admin/orders" element={<AdminOrders />} />
+                <Route path="/admin/customers" element={<AdminCustomers />} />
               </Route>
             </Route>
           </Routes>

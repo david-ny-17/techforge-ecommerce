@@ -1,5 +1,11 @@
 import { api } from "@/services/api"
-import type { AdminDashboardData, AdminProduct, PaginatedResponse } from "@/types"
+import type {
+  AdminCustomer,
+  AdminDashboardData,
+  AdminOrder,
+  AdminProduct,
+  PaginatedResponse,
+} from "@/types"
 
 // Quita los parámetros vacíos (si no, axios enviaría "search=" y similares)
 function clean(params: Record<string, string | number | undefined>) {
@@ -59,4 +65,46 @@ export async function deleteAdminProduct(id: number): Promise<DeleteProductResul
   }
   const body = data as { detail?: string; deactivated?: boolean }
   return { deactivated: body.deactivated === true, detail: body.detail ?? null }
+}
+
+// ---------- Pedidos ----------
+export type AdminOrderQuery = {
+  page?: number
+  search?: string
+  status?: string // "PAID" | "PENDING" | "FAILED"
+  ordering?: string
+}
+
+export async function getAdminOrders(
+  query: AdminOrderQuery
+): Promise<PaginatedResponse<AdminOrder>> {
+  const { data } = await api.get<PaginatedResponse<AdminOrder>>("admin/orders/", {
+    params: clean(query),
+  })
+  return data
+}
+
+// ---------- Clientes ----------
+export type AdminCustomerQuery = {
+  page?: number
+  search?: string
+  is_active?: string // "true" | "false"
+  ordering?: string
+}
+
+export async function getAdminCustomers(
+  query: AdminCustomerQuery
+): Promise<PaginatedResponse<AdminCustomer>> {
+  const { data } = await api.get<PaginatedResponse<AdminCustomer>>("admin/customers/", {
+    params: clean(query),
+  })
+  return data
+}
+
+// Un administrador solo puede activar o desactivar la cuenta (el backend ignora el resto)
+export async function setCustomerActive(id: number, isActive: boolean): Promise<AdminCustomer> {
+  const { data } = await api.patch<AdminCustomer>(`admin/customers/${id}/`, {
+    is_active: isActive,
+  })
+  return data
 }
