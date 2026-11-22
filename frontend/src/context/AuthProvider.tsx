@@ -83,6 +83,8 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
+  const updateUser = useCallback((profile: User) => setUser(profile), [])
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -92,8 +94,9 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      updateUser,
     }),
-    [user, token, loading, login, register, logout]
+    [user, token, loading, login, register, logout, updateUser]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -10,6 +10,8 @@ export interface AuthContextValue {
   login: (username: string, password: string) => Promise<void>
   register: (data: RegisterData) => Promise<void>
   logout: () => void
+  // Actualiza el usuario en memoria (tras editar el perfil o cambiar la contraseña)
+  updateUser: (user: User) => void
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null)

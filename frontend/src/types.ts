@@ -48,6 +48,7 @@ export interface User {
   address: string
   city: string
   is_staff: boolean
+  must_change_password: boolean
 }
 
 export interface AuthTokens {
@@ -268,4 +269,25 @@ export interface AdminCustomer {
   is_active: boolean
   orders_count: number // pedidos pagados
   total_spent: number // soles gastados en pedidos pagados
+}
+
+// ---------- Cuenta ----------
+export interface ProfileUpdate {
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  address: string
+  city: string
+}
+
+export interface ChangePasswordPayload {
+  current_password: string
+  new_password: string
+  new_password2: string
+}
+
+export interface ChangePasswordResponse {
+  detail: string
+  user: User
 }

@@ -22,5 +22,8 @@ export default function AdminRoute() {
   // endpoint exige is_staff; esto solo evita mostrar pantallas que no le sirven.)
   if (!user.is_staff) return <Navigate to="/" replace />
 
+  // Contraseña temporal sin cambiar: primero debe elegir una propia
+  if (user.must_change_password) return <Navigate to="/change-password" replace />
+
   return <Outlet />
 }

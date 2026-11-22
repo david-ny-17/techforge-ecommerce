@@ -20,8 +20,8 @@ export default function Login() {
   const from =
     (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? "/"
 
-  // Si ya hay sesión (o se acaba de iniciar), redirige
   if (!loading && user) {
+    if (user.must_change_password) return <Navigate to="/change-password" replace />
     return <Navigate to={user.is_staff && from === "/" ? "/admin" : from} replace />
   }
 

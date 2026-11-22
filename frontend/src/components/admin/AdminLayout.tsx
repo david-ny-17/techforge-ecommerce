@@ -1,4 +1,4 @@
-import { Cpu, LayoutDashboard, LogOut, Package, ShoppingBag, Store, Users } from "lucide-react"
+import { Cpu, LayoutDashboard, LogOut, Package, ShoppingBag, Store, User, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom"
 
@@ -100,6 +100,14 @@ export default function AdminLayout() {
               </div>
 
               <Link
+                to="/profile"
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-400 transition-colors hover:bg-white/5 hover:text-gray-100"
+              >
+                <User className="h-5 w-5 shrink-0" />
+                Mi cuenta
+              </Link>
+
+              <Link
                 to="/"
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-400 transition-colors hover:bg-white/5 hover:text-gray-100"
               >
@@ -130,6 +138,16 @@ export default function AdminLayout() {
                 <AdminBadge />
               </Link>
               <div className="flex items-center gap-1">
+
+                <Link
+                  to="/profile"
+                  aria-label="Mi cuenta"
+                  title="Mi cuenta"
+                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-white/5 hover:text-gray-100"
+                >
+                  <User className="h-5 w-5" />
+                </Link>
+
                 <Link
                   to="/"
                   aria-label="Ir a la tienda"

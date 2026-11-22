@@ -12,6 +12,7 @@ import AdminOrders from "@/pages/admin/AdminOrders"
 import AdminProducts from "@/pages/admin/AdminProducts"
 import Cart from "@/pages/Cart"
 import Catalog from "@/pages/Catalog"
+import ChangePassword from "@/pages/ChangePassword"
 import Checkout from "@/pages/Checkout"
 import Home from "@/pages/Home"
 import Login from "@/pages/Login"
@@ -41,6 +42,7 @@ export default function App() {
               {/* Rutas protegidas */}
               <Route element={<ProtectedRoute />}>
                 <Route path="/profile" element={<Profile />} />
+                <Route path="/change-password" element={<ChangePassword />} />
                 <Route path="/orders" element={<Orders />} />
                 <Route path="/builds" element={<SavedBuilds />} />
                 <Route path="/checkout" element={<Checkout />} />
