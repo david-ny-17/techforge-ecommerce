@@ -1,9 +1,13 @@
+import re
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from .models import Category, Order, OrderItem, Product
 
 User = get_user_model()
+
+PHONE_PATTERN = re.compile(r"^[0-9+()\-\s]{6,20}$")
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -19,9 +23,29 @@ class UserSerializer(serializers.ModelSerializer):
             "address",
             "city",
             "is_staff",
+            "must_change_password",
         )
-        # is_staff es de SOLO LECTURA: si no, un cliente podría hacerse administrador
-        read_only_fields = ("id", "is_staff")
+        # De SOLO LECTURA:
+        # - username: es con lo que se inicia sesión
+        # - is_staff / must_change_password: si no, un cliente podría darse permisos
+        #   o saltarse el cambio obligatorio editando su perfil
+        read_only_fields = ("id", "username", "is_staff", "must_change_password")
+
+    def validate_email(self, value):
+        value = value.strip().lower()
+        queryset = User.objects.filter(email__iexact=value)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Ya existe una cuenta con este correo.")
+        return value
+
+    def validate_phone(self, value):
+        if value and not PHONE_PATTERN.match(value):
+            raise serializers.ValidationError(
+                "Ingresa un teléfono válido (solo números, espacios y + - ( ))."
+            )
+        return value
 
 
 class RegisterSerializer(serializers.ModelSerializer):

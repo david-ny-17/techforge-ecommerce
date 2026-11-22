@@ -8,6 +8,11 @@ class CustomUser(AbstractUser):
     phone = models.CharField("teléfono", max_length=20, blank=True)
     address = models.CharField("dirección", max_length=255, blank=True)
     city = models.CharField("ciudad", max_length=100, blank=True)
+    must_change_password = models.BooleanField(
+        "debe cambiar la contraseña",
+        default=False,
+        help_text="Si está activo, el usuario debe elegir una contraseña nueva antes de usar el panel.",
+    )
 
     class Meta:
         verbose_name = "usuario"

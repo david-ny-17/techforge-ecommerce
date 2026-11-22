@@ -12,7 +12,7 @@ from django_filters import rest_framework as filters
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAdminUser
+from .permissions import IsStoreAdmin
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
@@ -196,7 +196,7 @@ class AdminProductFilter(filters.FilterSet):
 
 
 class AdminProductViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStoreAdmin]
     serializer_class = AdminProductSerializer
     pagination_class = AdminPagination
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -296,7 +296,7 @@ class AdminOrderSerializer(serializers.ModelSerializer):
 
 
 class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStoreAdmin]
     serializer_class = AdminOrderSerializer
     pagination_class = AdminPagination
     filterset_fields = ["status"]
@@ -363,7 +363,7 @@ class AdminCustomerViewSet(
 ):
     """Clientes (no incluye administradores). Se pueden ver y activar/desactivar."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStoreAdmin]
     serializer_class = AdminCustomerSerializer
     pagination_class = AdminPagination
     http_method_names = ["get", "patch", "head", "options"]
@@ -449,7 +449,7 @@ def _sales_series(paid_orders, today, days):
 class AdminDashboardView(APIView):
     """Todo lo que necesita el dashboard en una sola petición (el front la repite cada pocos segundos)."""
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStoreAdmin]
 
     def get(self, request):
         try:

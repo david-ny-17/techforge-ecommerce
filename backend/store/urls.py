@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter, SimpleRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from .account_api import ChangePasswordView
 from .admin_api import (
     AdminCustomerViewSet,
     AdminDashboardView,
@@ -26,7 +27,6 @@ router.register("categories", CategoryViewSet, basename="category")
 router.register("products", ProductViewSet, basename="product")
 router.register("builds", SavedBuildViewSet, basename="saved-build")
 
-# Panel de administración (todas estas rutas exigen is_staff). SimpleRouter: sin página índice pública.
 admin_router = SimpleRouter()
 admin_router.register("products", AdminProductViewSet, basename="admin-product")
 admin_router.register("orders", AdminOrderViewSet, basename="admin-order")
@@ -38,6 +38,7 @@ urlpatterns = [
     path("auth/login/", ThrottledTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/profile/", UserProfileView.as_view(), name="profile"),
+    path("auth/change-password/", ChangePasswordView.as_view(), name="change-password"),
     # Pedidos y pagos (Stripe)
     path("create-payment-intent/", CreatePaymentIntentView.as_view(), name="create-payment-intent"),
     path("confirm-payment/", ConfirmPaymentView.as_view(), name="confirm-payment"),
