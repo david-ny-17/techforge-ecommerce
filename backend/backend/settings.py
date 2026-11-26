@@ -10,29 +10,62 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
+from datetime import timedelta
 from pathlib import Path
 
-from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-import os
-
-from dotenv import load_dotenv
-
+# Carga backend\.env (python-dotenv NO pisa variables que ya existan en el sistema).
 load_dotenv(BASE_DIR / ".env")
+
+
+def env_bool(name, default=False):
+    """Lee una variable de entorno como booleano (1/true/yes/on)."""
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def env_list(name, default=None):
+    """Lee una variable de entorno como lista separada por comas."""
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return list(default or [])
+    return [item.strip() for item in value.split(",") if item.strip()]
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&o+psm5y)!+x!i+3nl2c7vev$d&5w75@#bjt4g8==20%wpz-#5'
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Por defecto esta APAGADO: hay que activarlo a propósito con DJANGO_DEBUG=True.
+DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
-ALLOWED_HOSTS = []
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if DEBUG:
+        # Clave solo para desarrollo local; nunca se usa con DEBUG apagado.
+        SECRET_KEY = "django-insecure-solo-para-desarrollo-local-no-usar-en-produccion-0123456789"
+    else:
+        raise ImproperlyConfigured(
+            "Falta la variable de entorno DJANGO_SECRET_KEY (obligatoria cuando "
+            "DJANGO_DEBUG no es True). Genera una con: "
+            "python -c \"from django.core.management.utils import get_random_secret_key; "
+            "print(get_random_secret_key())\" "
+            "y escribela en backend\\.env como DJANGO_SECRET_KEY='tu-clave'."
+        )
+
+ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", ["localhost", "127.0.0.1"])
+
+# Necesario solo si el backend se publica detrás de HTTPS en otro dominio.
+CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", [])
 
 
 # Application definition
@@ -52,7 +85,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",  
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -139,10 +172,14 @@ MAILERS = {
     },
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# CORS: orígenes del frontend autorizados a llamar a la API.
+CORS_ALLOWED_ORIGINS = env_list(
+    "DJANGO_CORS_ALLOWED_ORIGINS",
+    [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+)
 
 # Usuario personalizado
 AUTH_USER_MODEL = "store.CustomUser"
@@ -176,4 +213,6 @@ SIMPLE_JWT = {
 # Inteligencia artificial (Smart Builder)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+
+# Pagos (Stripe)
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
