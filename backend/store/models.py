@@ -1,6 +1,9 @@
-from django.contrib.auth.models import AbstractUser
-from django.db import models
 from django.conf import settings
+from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
+from django.db import models
+from django.utils import timezone
 
 
 class CustomUser(AbstractUser):
@@ -163,3 +166,81 @@ class SavedBuild(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.user})"
+
+
+class PromotionQuerySet(models.QuerySet):
+    def current(self, now=None):
+        """Promociones vigentes ahora: activas y dentro de su rango de fechas."""
+        now = now or timezone.now()
+        return self.filter(is_active=True, starts_at__lte=now, ends_at__gte=now)
+
+
+class Promotion(models.Model):
+    """Oferta con un porcentaje de descuento sobre productos y/o categorías enteras.
+
+    El precio del producto NO se modifica: el precio final se calcula al vuelo
+    mientras la promoción está vigente. Si un producto entra por varias promociones
+    (directo o por su categoría), se aplica solo la de mayor descuento (no se suman).
+    """
+
+    name = models.CharField("nombre", max_length=120)
+    description = models.CharField("descripción", max_length=255, blank=True)
+    discount_percent = models.PositiveSmallIntegerField(
+        "descuento (%)",
+        validators=[MinValueValidator(1), MaxValueValidator(90)],
+        help_text="Entero entre 1 y 90.",
+    )
+    starts_at = models.DateTimeField("inicio")
+    ends_at = models.DateTimeField("fin")
+    is_active = models.BooleanField(
+        "activa",
+        default=True,
+        help_text="Desmárcala para pausar la oferta sin borrarla.",
+    )
+    products = models.ManyToManyField(
+        Product,
+        related_name="promotions",
+        blank=True,
+        verbose_name="productos",
+        help_text="Productos individuales en oferta.",
+    )
+    categories = models.ManyToManyField(
+        Category,
+        related_name="promotions",
+        blank=True,
+        verbose_name="categorías",
+        help_text="Todos los productos de estas categorías entran en la oferta.",
+    )
+    created_at = models.DateTimeField("fecha de creación", auto_now_add=True)
+
+    objects = PromotionQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "promoción"
+        verbose_name_plural = "promociones"
+        ordering = ["-starts_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(discount_percent__gte=1, discount_percent__lte=90),
+                name="promotion_discount_between_1_and_90",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(ends_at__gt=models.F("starts_at")),
+                name="promotion_ends_after_start",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValidationError(
+                {"ends_at": "La fecha de fin debe ser posterior a la de inicio."}
+            )
+
+    @property
+    def is_current(self):
+        now = timezone.now()
+        return self.is_active and self.starts_at <= now <= self.ends_at
+
+    def __str__(self):
+        return f"{self.name} (-{self.discount_percent} %)"
