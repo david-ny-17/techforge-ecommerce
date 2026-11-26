@@ -123,6 +123,18 @@ class OrderItem(models.Model):
     unit_price = models.DecimalField(
         "precio unitario", max_digits=10, decimal_places=2
     )
+    list_price = models.DecimalField(
+        "precio de lista",
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            "Precio de lista del producto al comprar (antes de promociones). "
+            "Vacío en los pedidos anteriores a las promociones."
+        ),
+    )
 
     class Meta:
         verbose_name = "detalle de pedido"
