@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.db.models import Count, Sum
 
-from .models import Category, CustomUser, Order, OrderItem, Product
+from .models import Category, CustomUser, Order, OrderItem, Product, SavedBuild
 
 
 @admin.register(CustomUser)
@@ -71,3 +72,37 @@ class OrderAdmin(admin.ModelAdmin):
         "payment_intent_id",
     )
     inlines = [OrderItemInline]
+
+
+@admin.register(SavedBuild)
+class SavedBuildAdmin(admin.ModelAdmin):
+    list_display = ("name", "user", "budget", "products_count", "total_price", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("name", "prompt", "user__username", "user__email")
+    date_hierarchy = "created_at"
+    raw_id_fields = ("user",)
+    filter_horizontal = ("products",)
+    readonly_fields = ("created_at",)
+    list_per_page = 25
+    fieldsets = (
+        ("Armado", {"fields": ("name", "user", "prompt", "budget")}),
+        ("Productos", {"fields": ("products",)}),
+        ("Auditoría", {"fields": ("created_at",)}),
+    )
+
+    def get_queryset(self, request):
+        # Cantidad y total se calculan en la misma consulta (sin una consulta por fila)
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("user")
+            .annotate(_products_count=Count("products"), _total_price=Sum("products__price"))
+        )
+
+    @admin.display(description="Productos", ordering="_products_count")
+    def products_count(self, obj):
+        return obj._products_count
+
+    @admin.display(description="Total actual", ordering="_total_price")
+    def total_price(self, obj):
+        return f"S/ {obj._total_price or 0:.2f}"
