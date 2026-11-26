@@ -17,7 +17,7 @@ from stripe import StripeClient, StripeError
 
 from .ai_service import AIServiceError, get_pc_build_recommendation
 from .models import Category, Order, OrderItem, Product
-from .pricing import annotate_effective_price
+from .pricing import annotate_effective_price, build_promotion_index
 from .serializers import (
     CategorySerializer,
     ConfirmPaymentSerializer,
@@ -232,7 +232,9 @@ class CreatePaymentIntentView(APIView):
                 if missing:
                     raise CheckoutError(f"Productos no disponibles: {missing}")
 
-                # El precio SIEMPRE se toma de la base de datos, nunca del front
+                # El precio SIEMPRE se calcula en el servidor (base de datos + promociones
+                # vigentes), nunca se toma del front. Queda congelado en el pedido.
+                promotions = build_promotion_index()
                 total = Decimal("0.00")
                 lines = []
                 for pid, qty in quantities.items():
@@ -242,8 +244,9 @@ class CreatePaymentIntentView(APIView):
                             f"Stock insuficiente para '{product.name}' "
                             f"(disponible: {product.stock})."
                         )
-                    total += product.price * qty
-                    lines.append((product, qty))
+                    info = promotions.price_info(product)
+                    total += info.final_price * qty
+                    lines.append((product, qty, info))
 
                 order = Order.objects.create(
                     user=request.user,
@@ -258,9 +261,10 @@ class CreatePaymentIntentView(APIView):
                             order=order,
                             product=product,
                             quantity=qty,
-                            unit_price=product.price,
+                            unit_price=info.final_price,
+                            list_price=info.list_price,
                         )
-                        for product, qty in lines
+                        for product, qty, info in lines
                     ]
                 )
         except CheckoutError as exc:
