@@ -6,7 +6,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status, viewsets
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -15,6 +17,7 @@ from stripe import StripeClient, StripeError
 
 from .ai_service import AIServiceError, get_pc_build_recommendation
 from .models import Category, Order, OrderItem, Product
+from .pricing import annotate_effective_price
 from .serializers import (
     CategorySerializer,
     ConfirmPaymentSerializer,
@@ -56,19 +59,58 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
 
+# Los precios se comparan con el precio EFECTIVO (ya con la promoción vigente), calculado
+# en la base de datos como número decimal aproximado. Esta tolerancia (medio céntimo)
+# evita que un error de redondeo deje fuera un precio exacto, p. ej. S/ 800.00.
+PRICE_TOLERANCE = 0.005
+
+
 class ProductFilter(django_filters.FilterSet):
     category = django_filters.NumberFilter(field_name="category__id")
     category_slug = django_filters.CharFilter(field_name="category__slug")
-    min_price = django_filters.NumberFilter(field_name="price", lookup_expr="gte")
-    max_price = django_filters.NumberFilter(field_name="price", lookup_expr="lte")
+    min_price = django_filters.NumberFilter(method="filter_min_price")
+    max_price = django_filters.NumberFilter(method="filter_max_price")
     in_stock = django_filters.BooleanFilter(method="filter_in_stock")
+    on_sale = django_filters.BooleanFilter(method="filter_on_sale")
 
     class Meta:
         model = Product
-        fields = ["category", "category_slug", "min_price", "max_price", "in_stock"]
+        fields = [
+            "category",
+            "category_slug",
+            "min_price",
+            "max_price",
+            "in_stock",
+            "on_sale",
+        ]
+
+    def filter_min_price(self, queryset, name, value):
+        return queryset.filter(effective_price__gte=float(value) - PRICE_TOLERANCE)
+
+    def filter_max_price(self, queryset, name, value):
+        return queryset.filter(effective_price__lte=float(value) + PRICE_TOLERANCE)
 
     def filter_in_stock(self, queryset, name, value):
         return queryset.filter(stock__gt=0) if value else queryset
+
+    def filter_on_sale(self, queryset, name, value):
+        return queryset.filter(promo_percent__gt=0) if value else queryset
+
+
+class ProductOrderingFilter(OrderingFilter):
+    """Igual que OrderingFilter, pero "price" ordena por el precio con promoción y el
+    orden es estable: se desempata por id para que la paginación no repita productos."""
+
+    ALIASES = {"price": "effective_price", "-price": "-effective_price"}
+
+    def get_ordering(self, request, queryset, view):
+        ordering = super().get_ordering(request, queryset, view)
+        if not ordering:
+            return ordering
+        ordering = [self.ALIASES.get(term, term) for term in ordering]
+        if "id" not in ordering and "-id" not in ordering:
+            ordering.append("id")
+        return ordering
 
 
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
@@ -76,10 +118,17 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]
     lookup_field = "slug"
+    filter_backends = [DjangoFilterBackend, SearchFilter, ProductOrderingFilter]
     filterset_class = ProductFilter
     search_fields = ["name", "description"]
     ordering_fields = ["price", "created_at", "name"]
     ordering = ["-created_at"]
+
+    def get_queryset(self):
+        # Añade promo_percent y effective_price (el filtro y el orden por precio los usan)
+        return annotate_effective_price(
+            Product.objects.filter(is_active=True).select_related("category")
+        )
 
 
 # ---------- Pedidos y pagos con Stripe ----------
@@ -325,6 +374,7 @@ class OrderHistoryView(generics.ListAPIView):
             .prefetch_related("items__product")
             .order_by("-created_at")
         )
+
 
 # ---------- Smart Builder (IA) ----------
 
