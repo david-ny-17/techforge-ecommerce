@@ -3,7 +3,9 @@ import re
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+
 from .models import Category, Order, OrderItem, Product
+from .pricing import build_promotion_index
 
 User = get_user_model()
 
@@ -81,6 +83,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         validated_data.pop("password2")
         return User.objects.create_user(**validated_data)
 
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
@@ -88,8 +91,19 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    """Producto de cara al público (solo lectura).
+
+    OJO: aquí `price` es el precio que se PAGA (ya con la promoción vigente, si la hay).
+    El precio de lista va en `original_price`. En el panel de administración (admin_api.py)
+    `price` sigue siendo el precio de lista, porque allí se edita.
+    """
+
     category = CategorySerializer(read_only=True)
     image = serializers.SerializerMethodField()
+    price = serializers.SerializerMethodField()
+    original_price = serializers.SerializerMethodField()
+    discount_percent = serializers.SerializerMethodField()
+    promotion_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -99,6 +113,9 @@ class ProductSerializer(serializers.ModelSerializer):
             "slug",
             "description",
             "price",
+            "original_price",
+            "discount_percent",
+            "promotion_name",
             "stock",
             "image",
             "image_url",
@@ -109,6 +126,28 @@ class ProductSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
+    def _price_info(self, obj):
+        # Las promociones vigentes se cargan UNA vez y se comparten (vía el contexto) entre
+        # todos los productos de la respuesta: no hay una consulta por producto.
+        context = self.context
+        index = context.get("promotion_index")
+        if index is None:
+            index = build_promotion_index()
+            context["promotion_index"] = index
+        return index.price_info(obj)
+
+    def get_price(self, obj):
+        return f"{self._price_info(obj).final_price:.2f}"
+
+    def get_original_price(self, obj):
+        return f"{self._price_info(obj).list_price:.2f}"
+
+    def get_discount_percent(self, obj):
+        return self._price_info(obj).discount_percent
+
+    def get_promotion_name(self, obj):
+        return self._price_info(obj).promotion_name
+
     def get_image(self, obj):
         # Devuelve la URL absoluta de la imagen subida (o None)
         if not obj.image:
@@ -116,6 +155,7 @@ class ProductSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         url = obj.image.url
         return request.build_absolute_uri(url) if request else url
+
 
 # ---------- Pedidos ----------
 
@@ -156,6 +196,7 @@ class OrderSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+
 # ---------- Entrada del checkout (validación del JSON recibido) ----------
 
 class CartItemSerializer(serializers.Serializer):
@@ -171,6 +212,7 @@ class CreatePaymentIntentSerializer(serializers.Serializer):
 
 class ConfirmPaymentSerializer(serializers.Serializer):
     order_id = serializers.IntegerField(min_value=1)
+
 
 # ---------- Smart Builder ----------
 
