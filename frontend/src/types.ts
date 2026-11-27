@@ -36,9 +36,33 @@ export interface CartItem {
   slug: string
   name: string
   price: string // se guarda como texto, igual que en la API
+  original_price?: string // precio de lista, antes de la promoción
+  discount_percent?: number // 0 o ausente si no hay oferta
   image: string | null
   stock: number
   quantity: number
+}
+
+// ---------- Cotización del carrito (precios vigentes del servidor) ----------
+export interface CartQuoteItem {
+  product_id: number
+  slug: string
+  name: string
+  quantity: number
+  stock: number
+  price: string // precio unitario final (con promoción)
+  original_price: string // precio unitario de lista
+  discount_percent: number
+  promotion_name: string
+  line_total: string
+}
+
+export interface CartQuote {
+  items: CartQuoteItem[]
+  unavailable: number[] // ids que ya no existen o se desactivaron
+  list_total: string
+  discount_total: string
+  total: string
 }
 
 export interface User {
