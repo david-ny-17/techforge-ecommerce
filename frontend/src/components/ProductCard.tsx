@@ -2,7 +2,8 @@ import { ImageOff } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
 import AddToCartButton from "@/components/AddToCartButton"
-import { formatPrice, getProductImage } from "@/lib/format"
+import PriceTag, { DiscountBadge } from "@/components/PriceTag"
+import { getProductImage } from "@/lib/format"
 import type { Product } from "@/types"
 
 interface ProductCardProps {
@@ -33,6 +34,12 @@ export default function ProductCard({ product }: ProductCardProps) {
               <ImageOff className="h-12 w-12" />
             </div>
           )}
+
+          <DiscountBadge
+            percent={product.discount_percent}
+            className="absolute right-3 top-3"
+          />
+
           {outOfStock && (
             <span className="absolute left-3 top-3 rounded-full bg-black/80 px-2.5 py-1 text-xs font-medium text-zinc-300">
               Agotado
@@ -49,7 +56,7 @@ export default function ProductCard({ product }: ProductCardProps) {
               {product.name}
             </h3>
           </div>
-          <p className="text-xl font-bold text-gray-100">{formatPrice(product.price)}</p>
+          <PriceTag product={product} />
         </div>
       </Link>
 
