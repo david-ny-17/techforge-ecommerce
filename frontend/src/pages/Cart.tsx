@@ -1,17 +1,27 @@
 import { ArrowLeft, ImageOff, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 
+import CartNotice from "@/components/CartNotice"
+import { DiscountBadge } from "@/components/PriceTag"
 import { useCart } from "@/context/useCart"
 import { formatPrice } from "@/lib/format"
 
 export default function Cart() {
-  const { cart, totalItems, updateQuantity, removeFromCart, clearCart, getCartTotal } =
-    useCart()
+  const {
+    cart,
+    totalItems,
+    updateQuantity,
+    removeFromCart,
+    clearCart,
+    getCartTotal,
+    getCartSavings,
+  } = useCart()
 
   // Carrito vacío
   if (cart.length === 0) {
     return (
       <section className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center gap-4 px-4 text-center">
+        <CartNotice className="w-full text-left" />
         <ShoppingBag className="h-16 w-16 text-zinc-700" />
         <h1 className="text-2xl font-bold text-gray-100">Tu carrito está vacío</h1>
         <p className="text-zinc-500">
@@ -48,6 +58,8 @@ export default function Cart() {
         </button>
       </header>
 
+      <CartNotice className="mb-6" />
+
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Lista de productos */}
         <ul className="flex flex-col gap-4 lg:col-span-2">
@@ -80,8 +92,16 @@ export default function Cart() {
                     >
                       {item.name}
                     </Link>
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {formatPrice(item.price)} c/u
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-500">
+                      <span>{formatPrice(item.price)} c/u</span>
+                      {(item.discount_percent ?? 0) > 0 && item.original_price && (
+                        <>
+                          <span className="line-through">
+                            {formatPrice(item.original_price)}
+                          </span>
+                          <DiscountBadge percent={item.discount_percent ?? 0} />
+                        </>
+                      )}
                     </p>
                   </div>
                   <button
@@ -146,6 +166,22 @@ export default function Cart() {
               <dt>Artículos</dt>
               <dd className="text-gray-100">{totalItems}</dd>
             </div>
+
+            {getCartSavings() > 0 && (
+              <>
+                <div className="flex justify-between text-zinc-400">
+                  <dt>Subtotal</dt>
+                  <dd className="text-gray-100">
+                    {formatPrice(getCartTotal() + getCartSavings())}
+                  </dd>
+                </div>
+                <div className="flex justify-between text-purple-300">
+                  <dt>Descuentos</dt>
+                  <dd>-{formatPrice(getCartSavings())}</dd>
+                </div>
+              </>
+            )}
+
           </dl>
 
           <div className="my-4 border-t border-zinc-800" />
