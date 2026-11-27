@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth-storage"
 import type {
   AuthTokens,
+  CartQuote,
   Category,
   Order,
   PaginatedResponse,
@@ -125,6 +126,15 @@ export async function getCategories(): Promise<Category[]> {
 
 export async function getProductBySlug(slug: string): Promise<Product> {
   const { data } = await api.get<Product>(`products/${slug}/`)
+  return data
+}
+
+// ---------- Carrito ----------
+// Precios VIGENTES (promociones incluidas) de lo que hay en el carrito. Es público.
+export async function getCartQuote(
+  items: { product_id: number; quantity: number }[]
+): Promise<CartQuote> {
+  const { data } = await api.post<CartQuote>("cart/quote/", { cart_items: items })
   return data
 }
 
