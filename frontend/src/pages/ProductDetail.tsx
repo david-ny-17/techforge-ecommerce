@@ -3,9 +3,9 @@ import { ArrowLeft, ImageOff, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { Link, useLocation, useParams } from "react-router-dom"
 import AddToCartButton from "@/components/AddToCartButton"
+import PriceTag from "@/components/PriceTag"
 
 import {
-  formatPrice,
   formatSpecKey,
   formatSpecValue,
   getProductImage,
@@ -111,9 +111,7 @@ export default function ProductDetail() {
             <h1 className="mt-2 text-3xl font-bold text-gray-100">{product.name}</h1>
           </div>
 
-          <p className="text-4xl font-bold">
-            <span className="text-metal">{formatPrice(product.price)}</span>
-          </p>
+          <PriceTag product={product} size="detail" />
 
           <div>
             {outOfStock ? (
