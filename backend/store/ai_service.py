@@ -1,6 +1,7 @@
 import json
 import logging
 from decimal import Decimal, InvalidOperation
+from types import SimpleNamespace
 
 import httpx
 from django.conf import settings
@@ -9,6 +10,7 @@ from google.genai import errors, types
 from pydantic import BaseModel, Field, ValidationError
 
 from .models import Product
+from .pricing import build_promotion_index
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ Tu tarea: a partir de la necesidad y el presupuesto del cliente, recomendar comp
 
 REGLAS ESTRICTAS
 1. Recomienda ÚNICAMENTE productos del catálogo, usando sus IDs exactos. Nunca inventes productos, IDs ni especificaciones.
-2. Todos los precios del catálogo están en soles peruanos (S/). El presupuesto del cliente es un LÍMITE ESTRICTO: superarlo, aunque sea por poco, es un error grave. En un armado nuevo, aprovéchalo bien (apunta a usar entre el 90 % y el 100 %), invirtiendo primero en el componente que más influye en el uso pedido, pero es preferible quedarte un 5-10 % por debajo que pasarte. Mientras eliges los productos, lleva la cuenta de los precios por dentro para no pasarte. Si el presupuesto no alcanza para lo que pide, dilo con claridad y propone la mejor alternativa posible. Si el cliente no indica presupuesto, propón una configuración equilibrada y acláralo. En las modificaciones (regla 9) no recortes piezas por tu cuenta para cumplir el presupuesto.
+2. Todos los precios del catálogo están en soles peruanos (S/) y ya incluyen las ofertas vigentes. El presupuesto del cliente es un LÍMITE ESTRICTO: superarlo, aunque sea por poco, es un error grave. En un armado nuevo, aprovéchalo bien (apunta a usar entre el 90 % y el 100 %), invirtiendo primero en el componente que más influye en el uso pedido, pero es preferible quedarte un 5-10 % por debajo que pasarte. Mientras eliges los productos, lleva la cuenta de los precios por dentro para no pasarte. Si el presupuesto no alcanza para lo que pide, dilo con claridad y propone la mejor alternativa posible. Si el cliente no indica presupuesto, propón una configuración equilibrada y acláralo. En las modificaciones (regla 9) no recortes piezas por tu cuenta para cumplir el presupuesto.
 3. Compatibilidad obligatoria, verificada con las especificaciones del catálogo:
    - El socket del procesador debe coincidir con el de la placa madre.
    - El tipo de memoria RAM debe coincidir con el que soporta la placa madre.
@@ -95,26 +97,45 @@ class BuildRecommendation(BaseModel):
     )
 
 
+def _final_prices(products) -> dict[int, Decimal]:
+    """Precio FINAL (con las promociones vigentes) de cada producto: {id: precio}.
+
+    Es lo que el cliente paga en el checkout, así que la IA y los totales deben usarlo
+    en lugar del precio de lista (Product.price).
+    """
+    promotions = build_promotion_index()
+    return {product.id: promotions.price_info(product).final_price for product in products}
+
+
 def build_catalog_summary() -> tuple[str, set[int]]:
-    """Resumen compacto del catálogo activo con stock, agrupado por categoría."""
+    """Resumen compacto del catálogo activo con stock, agrupado por categoría.
+
+    Los precios son los FINALES (ya con las promociones vigentes).
+    """
     rows = (
         Product.objects.filter(is_active=True, stock__gt=0)
         .order_by("category__name", "price")
-        .values_list("id", "name", "price", "specifications", "category__name")
+        .values_list(
+            "id", "name", "price", "specifications", "category__name", "category_id"
+        )
     )
+    promotions = build_promotion_index()
 
     lines = ["Formato: ID | Nombre | Precio (S/) | Especificaciones"]
     valid_ids: set[int] = set()
     current_category = None
 
-    for product_id, name, price, specs, category in rows:
+    for product_id, name, price, specs, category, category_id in rows:
         if category != current_category:
             lines.append(f"\n## {category}")
             current_category = category
         specs_text = (
             json.dumps(specs, ensure_ascii=False, separators=(",", ":")) if specs else "{}"
         )
-        lines.append(f"{product_id} | {name} | {price:.2f} | {specs_text}")
+        final_price = promotions.price_info(
+            SimpleNamespace(id=product_id, category_id=category_id, price=price)
+        ).final_price
+        lines.append(f"{product_id} | {name} | {final_price:.2f} | {specs_text}")
         valid_ids.add(product_id)
 
     return "\n".join(lines), valid_ids
@@ -184,6 +205,7 @@ def _followup_context(history: list[dict], base_ids: list[int], base_budget) -> 
 
     if base_ids:
         products = _load_products(base_ids)
+        prices = _final_prices(products.values())
         lines.append(
             "CONFIGURACIÓN ACTUAL (se conserva automáticamente; devuelve solo los cambios):"
         )
@@ -192,7 +214,7 @@ def _followup_context(history: list[dict], base_ids: list[int], base_budget) -> 
             product = products.get(pid)
             if product:
                 lines.append(
-                    f"{product.id} | {product.category.name} | {product.name} | {product.price:.2f}"
+                    f"{product.id} | {product.category.name} | {product.name} | {prices[pid]:.2f}"
                 )
 
         total = _total_price(base_ids)
@@ -289,8 +311,9 @@ def _clean_ids(raw_ids: list[int], valid_ids: set[int]) -> list[int]:
 
 
 def _total_price(ids: list[int]) -> Decimal:
-    """Suma REAL de los precios de la base de datos (nunca la que diga la IA)."""
-    prices = dict(Product.objects.filter(id__in=ids).values_list("id", "price"))
+    """Suma REAL de los precios finales (con promociones vigentes) de la base de datos
+    (nunca la que diga la IA)."""
+    prices = _final_prices(Product.objects.filter(id__in=ids))
     return sum((prices[i] for i in ids if i in prices), Decimal("0"))
 
 
@@ -346,12 +369,13 @@ def _compose_message(
     # En una modificación sin cambios (p. ej. una pregunta) no se repite la lista
     if final_ids and (not is_modification or has_changes):
         products = _load_products(set(final_ids) | set(removed_ids))
+        prices = _final_prices(products.values())
         lines: list[str] = []
         for pid in final_ids:
             product = products.get(pid)
             if product is None:
                 continue
-            line = f"{product.category.name}: {product.name} (S/ {product.price:.2f})"
+            line = f"{product.category.name}: {product.name} (S/ {prices[pid]:.2f})"
             reason = reasons.get(pid, "").strip()
             if is_modification and pid not in base_set:
                 line += f" - NUEVO: {reason}" if reason else " - NUEVO"
@@ -362,7 +386,7 @@ def _compose_message(
             product = products.get(pid)
             if product is not None:
                 lines.append(
-                    f"Quitado: {product.category.name}: {product.name} (S/ {product.price:.2f})"
+                    f"Quitado: {product.category.name}: {product.name} (S/ {prices[pid]:.2f})"
                 )
         if lines:
             parts.append("\n".join(lines))
