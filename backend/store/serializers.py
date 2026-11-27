@@ -204,6 +204,10 @@ class CartItemSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, max_value=100)
 
 
+class CartQuoteSerializer(serializers.Serializer):
+    cart_items = CartItemSerializer(many=True, allow_empty=False, max_length=50)
+    
+
 class CreatePaymentIntentSerializer(serializers.Serializer):
     cart_items = CartItemSerializer(many=True, allow_empty=False)
     shipping_address = serializers.CharField(min_length=5, max_length=255)
