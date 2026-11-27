@@ -12,6 +12,7 @@ from .admin_api import (
 )
 from .saved_builds import SavedBuildViewSet
 from .views import (
+    CartQuoteView,
     CategoryViewSet,
     ConfirmPaymentView,
     CreatePaymentIntentView,
@@ -39,6 +40,8 @@ urlpatterns = [
     path("auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("auth/profile/", UserProfileView.as_view(), name="profile"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="change-password"),
+    # Carrito: precios vigentes
+    path("cart/quote/", CartQuoteView.as_view(), name="cart-quote"),
     # Pedidos y pagos (Stripe)
     path("create-payment-intent/", CreatePaymentIntentView.as_view(), name="create-payment-intent"),
     path("confirm-payment/", ConfirmPaymentView.as_view(), name="confirm-payment"),
