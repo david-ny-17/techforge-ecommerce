@@ -11,7 +11,9 @@ import { useRef, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react"
 import { Link, Navigate, useNavigate } from "react-router-dom"
 
+import CartNotice from "@/components/CartNotice"
 import FormField from "@/components/FormField"
+import { DiscountBadge } from "@/components/PriceTag"
 import { useAuth } from "@/context/useAuth"
 import { useCart } from "@/context/useCart"
 import { parseCheckoutError } from "@/lib/errors"
@@ -75,7 +77,7 @@ function validate(form: ShippingForm): FormErrors {
 
 function CheckoutContent() {
   const { user } = useAuth()
-  const { cart, totalItems, clearCart, getCartTotal } = useCart()
+  const { cart, totalItems, clearCart, getCartTotal, getCartSavings, syncCart } = useCart()
   const navigate = useNavigate()
   const stripe = useStripe()
   const elements = useElements()
@@ -136,7 +138,7 @@ function CheckoutContent() {
     const address = form.address.trim()
     const city = form.city.trim()
     const signature = JSON.stringify({
-      cart: cart.map((item) => [item.id, item.quantity]),
+      cart: cart.map((item) => [item.id, item.quantity, item.price]),
       address,
       city,
     })
@@ -145,6 +147,19 @@ function CheckoutContent() {
     setSubmitting(true)
     setStep(0)
     try {
+
+      // 0) Antes de cobrar se confirma que los precios, ofertas y stock que ve el cliente
+      // siguen vigentes. Si algo cambió, NO se cobra: el aviso explica qué pasó.
+      const sync = await syncCart()
+      if (sync.priceChanged || sync.removed.length > 0 || sync.adjusted.length > 0) {
+        setError(
+          "Los precios o la disponibilidad de tu pedido cambiaron. Revisa el nuevo total y " +
+            "vuelve a pulsar «Pagar». No se ha hecho ningún cobro."
+        )
+        setSubmitting(false)
+        return
+      }
+
       // 1) Pedido + PaymentIntent (el total lo calcula el servidor desde la base de datos)
       let session = sessionRef.current
       if (!session || session.signature !== signature) {
@@ -213,6 +228,8 @@ function CheckoutContent() {
           {totalItems} {totalItems === 1 ? "artículo" : "artículos"} en tu pedido
         </p>
       </header>
+
+      <CartNotice className="mb-6" />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Columna izquierda: formulario */}
@@ -367,8 +384,16 @@ function CheckoutContent() {
 
                 <div className="min-w-0 flex-1">
                   <p className="line-clamp-1 text-sm font-medium text-gray-100">{item.name}</p>
-                  <p className="text-xs text-zinc-500">
-                    {item.quantity} × {formatPrice(item.price)}
+                  <p className="flex flex-wrap items-center gap-x-2 text-xs text-zinc-500">
+                    <span>
+                      {item.quantity} × {formatPrice(item.price)}
+                    </span>
+                    {(item.discount_percent ?? 0) > 0 && item.original_price && (
+                      <>
+                        <span className="line-through">{formatPrice(item.original_price)}</span>
+                        <DiscountBadge percent={item.discount_percent ?? 0} />
+                      </>
+                    )}
                   </p>
                 </div>
 
@@ -380,6 +405,21 @@ function CheckoutContent() {
           </ul>
 
           <div className="my-4 border-t border-zinc-800" />
+
+          {getCartSavings() > 0 && (
+            <dl className="mb-3 space-y-2 text-sm">
+              <div className="flex justify-between text-zinc-400">
+                <dt>Subtotal</dt>
+                <dd className="text-gray-100">
+                  {formatPrice(getCartTotal() + getCartSavings())}
+                </dd>
+              </div>
+              <div className="flex justify-between text-purple-300">
+                <dt>Descuentos</dt>
+                <dd>-{formatPrice(getCartSavings())}</dd>
+              </div>
+            </dl>
+          )}
 
           <div className="flex items-end justify-between">
             <span className="text-zinc-400">Total a pagar</span>
