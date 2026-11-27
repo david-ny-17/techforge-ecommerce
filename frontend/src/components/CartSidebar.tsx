@@ -2,6 +2,7 @@ import { ImageOff, Lock, Minus, Plus, ShoppingBag, Trash2, X } from "lucide-reac
 import { useEffect } from "react"
 import { Link, useNavigate } from "react-router-dom"
 
+import CartNotice from "@/components/CartNotice"
 import { useCart } from "@/context/useCart"
 import { formatPrice } from "@/lib/format"
 
@@ -11,7 +12,8 @@ interface CartSidebarProps {
 }
 
 export default function CartSidebar({ open, onClose }: CartSidebarProps) {
-  const { cart, totalItems, updateQuantity, removeFromCart, getCartTotal } = useCart()
+  const { cart, totalItems, updateQuantity, removeFromCart, getCartTotal, getCartSavings } =
+    useCart()
   const navigate = useNavigate()
 
   // Escape cierra el panel y el scroll de la página se bloquea mientras está abierto
@@ -89,6 +91,7 @@ export default function CartSidebar({ open, onClose }: CartSidebarProps) {
         {cart.length === 0 ? (
           /* Carrito vacío */
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
+            <CartNotice className="w-full text-left" />
             <ShoppingBag className="h-14 w-14 text-zinc-700" />
             <p className="text-zinc-400">Tu carrito está vacío.</p>
             <button
@@ -101,6 +104,7 @@ export default function CartSidebar({ open, onClose }: CartSidebarProps) {
           </div>
         ) : (
           <>
+            <CartNotice className="mx-5 mb-3" />
             {/* Lista */}
             <ul className="flex-1 space-y-3 overflow-y-auto px-5 pb-4">
               {cart.map((item) => (
@@ -160,9 +164,19 @@ export default function CartSidebar({ open, onClose }: CartSidebarProps) {
                         </button>
                       </div>
 
-                      <p className="text-sm font-bold text-gray-100">
-                        {formatPrice(Number(item.price) * item.quantity)}
-                      </p>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-100">
+                          {formatPrice(Number(item.price) * item.quantity)}
+                        </p>
+                        {(item.discount_percent ?? 0) > 0 && item.original_price && (
+                          <p className="text-xs text-zinc-500">
+                            <span className="line-through">
+                              {formatPrice(Number(item.original_price) * item.quantity)}
+                            </span>{" "}
+                            <span className="text-purple-300">-{item.discount_percent}%</span>
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </li>
@@ -171,6 +185,12 @@ export default function CartSidebar({ open, onClose }: CartSidebarProps) {
 
             {/* Pie: total y pago */}
             <footer className="border-t border-purple-700/30 bg-black/40 p-5">
+              {getCartSavings() > 0 && (
+                <div className="mb-2 flex justify-between text-sm text-purple-300">
+                  <span>Ahorras con ofertas</span>
+                  <span>-{formatPrice(getCartSavings())}</span>
+                </div>
+              )}
               <div className="flex items-end justify-between">
                 <span className="text-zinc-400">Total a pagar</span>
                 <span className="text-metal text-3xl font-bold">
