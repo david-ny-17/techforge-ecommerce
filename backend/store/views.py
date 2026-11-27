@@ -19,6 +19,7 @@ from .ai_service import AIServiceError, get_pc_build_recommendation
 from .models import Category, Order, OrderItem, Product
 from .pricing import annotate_effective_price, build_promotion_index
 from .serializers import (
+    CartQuoteSerializer,
     CategorySerializer,
     ConfirmPaymentSerializer,
     CreatePaymentIntentSerializer,
@@ -128,6 +129,69 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         # Añade promo_percent y effective_price (el filtro y el orden por precio los usan)
         return annotate_effective_price(
             Product.objects.filter(is_active=True).select_related("category")
+        )
+
+
+# ---------- Carrito: precios vigentes ----------
+
+class CartQuoteView(APIView):
+    """Calcula con los precios VIGENTES (promociones incluidas) el total de un carrito.
+
+    Es público (el carrito funciona sin sesión) y no modifica nada: sirve para que el
+    frontend muestre el mismo total que luego cobra el checkout.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = CartQuoteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Une productos repetidos, igual que el checkout: {product_id: cantidad_total}
+        quantities = {}
+        for item in serializer.validated_data["cart_items"]:
+            pid = item["product_id"]
+            quantities[pid] = quantities.get(pid, 0) + item["quantity"]
+
+        products = Product.objects.filter(id__in=quantities.keys(), is_active=True)
+        products_by_id = {product.id: product for product in products}
+        promotions = build_promotion_index()
+
+        items = []
+        unavailable = []  # productos que ya no existen o se desactivaron
+        list_total = Decimal("0.00")
+        total = Decimal("0.00")
+        for pid, qty in quantities.items():
+            product = products_by_id.get(pid)
+            if product is None:
+                unavailable.append(pid)
+                continue
+            info = promotions.price_info(product)
+            list_total += info.list_price * qty
+            total += info.final_price * qty
+            items.append(
+                {
+                    "product_id": product.id,
+                    "slug": product.slug,
+                    "name": product.name,
+                    "quantity": qty,
+                    "stock": product.stock,
+                    "price": f"{info.final_price:.2f}",
+                    "original_price": f"{info.list_price:.2f}",
+                    "discount_percent": info.discount_percent,
+                    "promotion_name": info.promotion_name,
+                    "line_total": f"{info.final_price * qty:.2f}",
+                }
+            )
+
+        return Response(
+            {
+                "items": items,
+                "unavailable": unavailable,
+                "list_total": f"{list_total:.2f}",
+                "discount_total": f"{list_total - total:.2f}",
+                "total": f"{total:.2f}",
+            }
         )
 
 
