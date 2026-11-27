@@ -10,7 +10,10 @@ export interface Product {
   name: string
   slug: string
   description: string
-  price: string // DRF devuelve los decimales como texto
+  price: string 
+  original_price: string 
+  discount_percent: number 
+  promotion_name: string
   stock: number
   image: string | null
   image_url: string
