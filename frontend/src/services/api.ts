@@ -111,6 +111,7 @@ export interface ProductQuery {
   min_price?: number
   max_price?: number
   in_stock?: boolean
+  on_sale?: boolean
 }
 
 // Axios omite los parámetros que valgan undefined
