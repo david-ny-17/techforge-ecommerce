@@ -10,6 +10,7 @@ from .admin_api import (
     AdminProductViewSet,
     ThrottledTokenObtainPairView,
 )
+from .promotions_api import PromotionListView
 from .saved_builds import SavedBuildViewSet
 from .views import (
     CartQuoteView,
@@ -42,6 +43,8 @@ urlpatterns = [
     path("auth/change-password/", ChangePasswordView.as_view(), name="change-password"),
     # Carrito: precios vigentes
     path("cart/quote/", CartQuoteView.as_view(), name="cart-quote"),
+    # Promociones vigentes (público)
+    path("promotions/", PromotionListView.as_view(), name="promotions"),
     # Pedidos y pagos (Stripe)
     path("create-payment-intent/", CreatePaymentIntentView.as_view(), name="create-payment-intent"),
     path("confirm-payment/", ConfirmPaymentView.as_view(), name="confirm-payment"),
