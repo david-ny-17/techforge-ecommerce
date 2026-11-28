@@ -1,5 +1,5 @@
 import axios from "axios"
-import { ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2, Search, Tag, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react"
 import { useSearchParams } from "react-router-dom"
@@ -65,6 +65,7 @@ interface Filters {
   minPrice: string
   maxPrice: string
   inStock: boolean
+  onSale: boolean
 }
 
 interface CatalogResult {
@@ -206,15 +207,43 @@ function FiltersBar({ applied, hasActive, onApply, onClear }: FiltersBarProps) {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
-          <input
-            type="checkbox"
-            checked={applied.inStock}
-            onChange={(e) => onApply({ ...applied, inStock: e.target.checked })}
-            className="h-4 w-4 accent-purple-600"
-          />
-          Solo con stock
-        </label>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={applied.inStock}
+              onChange={(e) => onApply({ ...applied, inStock: e.target.checked })}
+              className="h-4 w-4 accent-purple-600"
+            />
+            Solo con stock
+          </label>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={applied.onSale}
+            onClick={() => onApply({ ...applied, onSale: !applied.onSale })}
+            className={`inline-flex items-center gap-2.5 rounded-full border py-1.5 pl-1.5 pr-4 text-sm font-semibold transition-all ${
+              applied.onSale
+                ? "border-purple-500 bg-purple-900/30 text-purple-200 shadow-[0_0_20px_rgb(139_47_232/0.35)]"
+                : "border-zinc-800 bg-black text-zinc-400 hover:border-purple-700 hover:text-purple-300"
+            }`}
+          >
+            <span
+              className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors ${
+                applied.onSale ? "bg-purple-600" : "bg-zinc-800"
+              }`}
+            >
+              <span
+                className={`absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  applied.onSale ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </span>
+            <Tag className="h-4 w-4" />
+            Solo ofertas
+          </button>
+        </div>
 
         {hasActive && (
           <button
@@ -243,12 +272,17 @@ export default function Catalog() {
   const minPrice = cleanPrice(searchParams.get("min_price"))
   const maxPrice = cleanPrice(searchParams.get("max_price"))
   const inStock = searchParams.get("in_stock") === "true"
+  const onSale = searchParams.get("on_sale") === "true"
 
-  const applied: Filters = { search, ordering, minPrice, maxPrice, inStock }
-  const hasActiveFilters = search !== "" || ordering !== "" || minPrice !== "" || maxPrice !== "" || inStock
-  const hasResultFilters = search !== "" || minPrice !== "" || maxPrice !== "" || inStock
+  const applied: Filters = { search, ordering, minPrice, maxPrice, inStock, onSale }
+  const hasActiveFilters =
+    search !== "" || ordering !== "" || minPrice !== "" || maxPrice !== "" || inStock || onSale
+  const hasResultFilters =
+    search !== "" || minPrice !== "" || maxPrice !== "" || inStock || onSale
 
-  const queryKey = [categorySlug, page, search, ordering, minPrice, maxPrice, inStock].join("|")
+  const queryKey = [categorySlug, page, search, ordering, minPrice, maxPrice, inStock, onSale].join(
+    "|"
+  )
 
   const [categories, setCategories] = useState<Category[]>([])
   const [result, setResult] = useState<CatalogResult | null>(null)
@@ -283,6 +317,7 @@ export default function Catalog() {
       min_price: minPrice ? Number(minPrice) : undefined,
       max_price: maxPrice ? Number(maxPrice) : undefined,
       in_stock: inStock || undefined,
+      on_sale: onSale || undefined,
     })
       .then((data) => {
         if (cancelled) return
@@ -316,7 +351,7 @@ export default function Catalog() {
     return () => {
       cancelled = true
     }
-  }, [categorySlug, page, search, ordering, minPrice, maxPrice, inStock, queryKey])
+  }, [categorySlug, page, search, ordering, minPrice, maxPrice, inStock, onSale, queryKey])
 
   // Cambia parámetros de la URL conservando el resto; por defecto vuelve a la página 1
   const updateParams = (changes: Record<string, string | undefined>, resetPage = true) => {
@@ -338,6 +373,7 @@ export default function Catalog() {
       min_price: filters.minPrice || undefined,
       max_price: filters.maxPrice || undefined,
       in_stock: filters.inStock ? "true" : undefined,
+      on_sale: filters.onSale ? "true" : undefined,
     })
 
   const clearFilters = () =>
@@ -347,6 +383,7 @@ export default function Catalog() {
       min_price: undefined,
       max_price: undefined,
       in_stock: undefined,
+      on_sale: undefined,
     })
 
   const goToPage = (target: number) => {
