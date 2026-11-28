@@ -100,6 +100,27 @@ class Order(models.Model):
         "ID del pago (Stripe)", max_length=100, blank=True, default="", db_index=True
     )
 
+    coupon = models.ForeignKey(
+        "Coupon",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        editable=False,
+        related_name="orders",
+        verbose_name="cupón",
+    )
+    coupon_code = models.CharField(
+        "código del cupón", max_length=30, blank=True, default="", editable=False
+    )
+    discount_amount = models.DecimalField(
+        "descuento por cupón",
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        editable=False,
+        help_text="Lo descontado por el cupón. El total del pedido ya lo incluye.",
+    )
+
     class Meta:
         verbose_name = "pedido"
         verbose_name_plural = "pedidos"
