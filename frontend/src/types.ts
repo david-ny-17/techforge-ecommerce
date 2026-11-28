@@ -57,12 +57,23 @@ export interface CartQuoteItem {
   line_total: string
 }
 
+export interface CartQuoteCoupon {
+  code: string
+  label: string // "-10 %" o "-S/ 50.00"
+  description: string
+  discount: string
+}
+
 export interface CartQuote {
   items: CartQuoteItem[]
   unavailable: number[] // ids que ya no existen o se desactivaron
   list_total: string
-  discount_total: string
-  total: string
+  discount_total: string // lo que ahorran las ofertas
+  subtotal: string // total con ofertas, antes del cupón
+  coupon: CartQuoteCoupon | null // cupón aplicado, o null
+  coupon_discount: string // lo que descuenta el cupón ("0.00" si no hay)
+  coupon_error: string | null // por qué no sirvió el cupón, si lo envió
+  total: string // lo que se paga (ya con ofertas y cupón)
 }
 
 export interface User {
@@ -111,6 +122,8 @@ export interface Order {
   created_at: string
   shipping_address: string
   shipping_city: string
+  coupon_code: string // "" si no usó cupón
+  discount_amount: string // lo que descontó el cupón
   items: OrderItem[]
 }
 
@@ -118,6 +131,7 @@ export interface PaymentIntentPayload {
   cart_items: { product_id: number; quantity: number }[]
   shipping_address: string
   shipping_city: string
+  coupon_code?: string
 }
 
 export interface PaymentIntentResponse {
