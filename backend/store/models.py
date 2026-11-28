@@ -256,3 +256,120 @@ class Promotion(models.Model):
 
     def __str__(self):
         return f"{self.name} (-{self.discount_percent} %)"
+
+
+class Coupon(models.Model):
+    """Cupón de descuento que el cliente escribe en el carrito o en el checkout.
+
+    Se aplica sobre el subtotal YA rebajado por las promociones (se acumulan).
+    El código se guarda siempre en MAYÚSCULAS, así que no distingue mayúsculas al escribirlo.
+    """
+
+    class DiscountType(models.TextChoices):
+        PERCENT = "PERCENT", "Porcentaje (%)"
+        FIXED = "FIXED", "Monto fijo (S/)"
+
+    code = models.CharField(
+        "código",
+        max_length=30,
+        unique=True,
+        help_text="Sin espacios. Ej: TECH10. Se guarda en mayúsculas.",
+    )
+    description = models.CharField("descripción", max_length=255, blank=True)
+    discount_type = models.CharField(
+        "tipo de descuento",
+        max_length=10,
+        choices=DiscountType.choices,
+        default=DiscountType.PERCENT,
+    )
+    value = models.DecimalField(
+        "valor",
+        max_digits=10,
+        decimal_places=2,
+        help_text="Porcentaje (de 1 a 90) o monto en soles, según el tipo.",
+    )
+    min_purchase = models.DecimalField(
+        "compra mínima (S/)",
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Subtotal mínimo (ya con ofertas) para poder usarlo. 0 = sin mínimo.",
+    )
+    starts_at = models.DateTimeField(
+        "válido desde", null=True, blank=True, help_text="Vacío = ya vigente."
+    )
+    expires_at = models.DateTimeField(
+        "vence", null=True, blank=True, help_text="Vacío = no vence."
+    )
+    max_uses = models.PositiveIntegerField(
+        "límite de usos",
+        null=True,
+        blank=True,
+        help_text="Veces que puede usarse en total. Vacío = ilimitado.",
+    )
+    max_uses_per_user = models.PositiveSmallIntegerField(
+        "límite por cliente",
+        null=True,
+        blank=True,
+        default=1,
+        help_text="Veces que puede usarlo cada cliente. Vacío = ilimitado.",
+    )
+    is_active = models.BooleanField(
+        "activo",
+        default=True,
+        help_text="Desmárcalo para pausar el cupón sin borrarlo.",
+    )
+    created_at = models.DateTimeField("fecha de creación", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "cupón"
+        verbose_name_plural = "cupones"
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(value__gt=0),
+                name="coupon_value_positive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(discount_type="FIXED") | models.Q(value__lte=90),
+                name="coupon_percent_max_90",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(starts_at__isnull=True)
+                    | models.Q(expires_at__isnull=True)
+                    | models.Q(expires_at__gt=models.F("starts_at"))
+                ),
+                name="coupon_expires_after_start",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        # Se normaliza aquí para que la comprobación de código único use MAYÚSCULAS
+        self.code = (self.code or "").strip().upper()
+        errors = {}
+        if " " in self.code:
+            errors["code"] = "El código no puede tener espacios."
+        if self.value is not None:
+            if self.value <= 0:
+                errors["value"] = "El valor debe ser mayor que cero."
+            elif self.discount_type == self.DiscountType.PERCENT and self.value > 90:
+                errors["value"] = "Un porcentaje no puede superar el 90 %."
+        if self.starts_at and self.expires_at and self.expires_at <= self.starts_at:
+            errors["expires_at"] = "El vencimiento debe ser posterior al inicio."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.strip().upper()
+        super().save(*args, **kwargs)
+
+    @property
+    def discount_label(self):
+        if self.discount_type == self.DiscountType.PERCENT:
+            return f"-{self.value.normalize():f} %"
+        return f"-S/ {self.value:.2f}"
+
+    def __str__(self):
+        return f"{self.code} ({self.discount_label})"
