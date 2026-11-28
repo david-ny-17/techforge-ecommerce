@@ -23,8 +23,9 @@ from .coupons import (
     apply_coupon,
     is_rate_limited,
     register_failure,
+    usage_error,
 )
-from .models import Category, Order, OrderItem, Product
+from .models import Category, Coupon, Order, OrderItem, Product
 from .pricing import annotate_effective_price, build_promotion_index
 from .serializers import (
     CartQuoteSerializer,
@@ -259,15 +260,17 @@ def to_cents(amount):
 def mark_order_paid(order_id, client):
     """Pasa el pedido a PAID y descuenta el stock, una sola vez.
 
-    Devuelve (pedido, reembolsado). Si el stock se agotó mientras el cliente pagaba,
-    el pedido queda FAILED y el dinero se devuelve automáticamente.
+    Devuelve (pedido, reembolsado, motivo). Si el stock se agotó o el cupón llegó a su
+    límite de usos mientras el cliente pagaba, el pedido queda FAILED y el dinero se
+    devuelve automáticamente; `motivo` explica por qué (vacío si todo salió bien).
     """
     needs_refund = False
+    reason = ""
 
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order_id)
         if order.status == Order.Status.PAID:
-            return order, False  # ya estaba pagado: no se descuenta stock dos veces
+            return order, False, ""  # ya estaba pagado: no se descuenta stock dos veces
 
         items = list(order.items.all())
         products = {
@@ -277,7 +280,25 @@ def mark_order_paid(order_id, client):
             )
         }
 
-        if any(products[item.product_id].stock < item.quantity for item in items):
+        # El cupón se vuelve a comprobar AQUÍ, con su fila bloqueada: así dos clientes que
+        # pagan a la vez no pueden pasarse del límite de usos.
+        coupon_problem = ""
+        if order.coupon_id:
+            coupon = Coupon.objects.select_for_update().get(pk=order.coupon_id)
+            error = usage_error(coupon, order.user)
+            if error:
+                coupon_problem = (
+                    f"No se pudo aplicar el cupón {order.coupon_code}: "
+                    f"{error[0].lower()}{error[1:]}"
+                )
+
+        out_of_stock = any(
+            products[item.product_id].stock < item.quantity for item in items
+        )
+        if out_of_stock or coupon_problem:
+            reason = (
+                "Un producto se agotó mientras pagabas." if out_of_stock else coupon_problem
+            )
             order.status = Order.Status.FAILED
             order.save(update_fields=["status"])
             needs_refund = True
@@ -296,7 +317,7 @@ def mark_order_paid(order_id, client):
             # Revisar y reembolsar a mano desde el Dashboard de Stripe
             logger.exception("No se pudo reembolsar el pedido %s", order.pk)
 
-    return order, needs_refund
+    return order, needs_refund, reason
 
 
 def mark_order_failed(order_id):
@@ -458,12 +479,11 @@ class ConfirmPaymentView(APIView):
             )
 
         if intent.status == "succeeded":
-            order, refunded = mark_order_paid(order.pk, client)
+            order, refunded, reason = mark_order_paid(order.pk, client)
             if refunded:
                 return Response(
                     {
-                        "detail": "Un producto se agotó mientras pagabas. "
-                        "Te reembolsamos el importe automáticamente.",
+                        "detail": f"{reason} Te reembolsamos el importe automáticamente.",
                         "order": OrderSerializer(order).data,
                     },
                     status=status.HTTP_400_BAD_REQUEST,
