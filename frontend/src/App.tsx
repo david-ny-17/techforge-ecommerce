@@ -16,6 +16,7 @@ import ChangePassword from "@/pages/ChangePassword"
 import Checkout from "@/pages/Checkout"
 import Home from "@/pages/Home"
 import Login from "@/pages/Login"
+import Offers from "@/pages/Offers"
 import OrderSuccess from "@/pages/OrderSuccess"
 import Orders from "@/pages/Orders"
 import ProductDetail from "@/pages/ProductDetail"
@@ -33,6 +34,7 @@ export default function App() {
             <Route element={<Layout />}>
               <Route path="/" element={<Home />} />
               <Route path="/catalog" element={<Catalog />} />
+              <Route path="/offers" element={<Offers />} />
               <Route path="/product/:slug" element={<ProductDetail />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/login" element={<Login />} />
