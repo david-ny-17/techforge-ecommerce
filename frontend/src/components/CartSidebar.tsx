@@ -12,8 +12,16 @@ interface CartSidebarProps {
 }
 
 export default function CartSidebar({ open, onClose }: CartSidebarProps) {
-  const { cart, totalItems, updateQuantity, removeFromCart, getCartTotal, getCartSavings } =
-    useCart()
+  const {
+    cart,
+    totalItems,
+    updateQuantity,
+    removeFromCart,
+    getCartSavings,
+    coupon,
+    getCouponDiscount,
+    getPayableTotal,
+  } = useCart()
   const navigate = useNavigate()
 
   // Escape cierra el panel y el scroll de la página se bloquea mientras está abierto
@@ -191,10 +199,18 @@ export default function CartSidebar({ open, onClose }: CartSidebarProps) {
                   <span>-{formatPrice(getCartSavings())}</span>
                 </div>
               )}
+
+              {coupon && (
+                <div className="mb-2 flex justify-between text-sm text-purple-300">
+                  <span>Cupón ({coupon.code})</span>
+                  <span>-{formatPrice(getCouponDiscount())}</span>
+                </div>
+              )}
+
               <div className="flex items-end justify-between">
                 <span className="text-zinc-400">Total a pagar</span>
                 <span className="text-metal text-3xl font-bold">
-                  {formatPrice(getCartTotal())}
+                  {formatPrice(getPayableTotal())}
                 </span>
               </div>
 
