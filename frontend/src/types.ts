@@ -76,6 +76,28 @@ export interface CartQuote {
   total: string // lo que se paga (ya con ofertas y cupón)
 }
 
+// ---------- Promociones vigentes ----------
+export interface PromotionCategory {
+  id: number
+  name: string
+  slug: string
+}
+
+export interface Promotion {
+  id: number
+  name: string
+  description: string
+  discount_percent: number
+  starts_at: string // fecha ISO
+  ends_at: string // fecha ISO: cuándo termina la oferta
+  categories: PromotionCategory[]
+}
+
+export interface PromotionsResponse {
+  server_time: string // hora del servidor (ISO), para que la cuenta regresiva no dependa del reloj del cliente
+  promotions: Promotion[] // vacío si no hay ofertas vigentes
+}
+
 export interface User {
   id: number
   username: string
