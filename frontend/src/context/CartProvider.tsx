@@ -3,12 +3,13 @@ import type { ReactNode } from "react"
 
 import { getProductImage } from "@/lib/format"
 import { getCartQuote } from "@/services/api"
-import type { CartItem, CartQuote, Product } from "@/types"
+import type { CartItem, CartQuote, CartQuoteCoupon, Product } from "@/types"
 
 import { CartContext } from "./cart-context"
-import type { CartContextValue, CartSyncResult } from "./cart-context"
+import type { CartContextValue, CartSyncResult, CouponApplyResult } from "./cart-context"
 
 const STORAGE_KEY = "techforge_cart"
+const COUPON_KEY = "techforge_coupon"
 
 function isCartItem(value: unknown): value is CartItem {
   if (typeof value !== "object" || value === null) return false
@@ -36,11 +37,36 @@ function loadCart(): CartItem[] {
   }
 }
 
+function isCoupon(value: unknown): value is CartQuoteCoupon {
+  if (typeof value !== "object" || value === null) return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.code === "string" &&
+    v.code !== "" &&
+    typeof v.label === "string" &&
+    typeof v.description === "string" &&
+    typeof v.discount === "string"
+  )
+}
+
+// Lee el cupón guardado; si está corrupto o no existe, devuelve null
+function loadCoupon(): CartQuoteCoupon | null {
+  try {
+    const raw = localStorage.getItem(COUPON_KEY)
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    return isCoupon(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
 const EMPTY_SYNC: CartSyncResult = {
   ok: true,
   priceChanged: false,
   removed: [],
   adjusted: [],
+  couponRemoved: null,
 }
 
 // Mensaje para el cliente cuando la sincronización cambió algo de su carrito
@@ -64,6 +90,24 @@ export default function CartProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>(loadCart)
 
   const [cartNotice, setCartNotice] = useState<string | null>(null)
+
+  const [coupon, setCoupon] = useState<CartQuoteCoupon | null>(loadCoupon)
+
+  // Igual que cartRef: el cupón más reciente, para usarlo dentro de funciones estables
+  const couponRef = useRef(coupon)
+  useEffect(() => {
+    couponRef.current = coupon
+  }, [coupon])
+
+  // Persistencia del cupón: sobrevive a F5 (se revalida solo en cada sincronización)
+  useEffect(() => {
+    try {
+      if (coupon) localStorage.setItem(COUPON_KEY, JSON.stringify(coupon))
+      else localStorage.removeItem(COUPON_KEY)
+    } catch {
+      // Si el almacenamiento falla, el cupón sigue funcionando en memoria
+    }
+  }, [coupon])
 
   // Siempre apunta al carrito más reciente (para usarlo dentro de funciones estables)
   const cartRef = useRef(cart)
@@ -138,6 +182,7 @@ export default function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = useCallback(() => {
     setCart([])
     setCartNotice(null)
+    setCoupon(null)
   }, [])
 
   // Se calcula en centavos para evitar errores de coma flotante (0.1 + 0.2)
@@ -166,24 +211,25 @@ export default function CartProvider({ children }: { children: ReactNode }) {
     [cart]
   )
 
+  const removeCoupon = useCallback(() => setCoupon(null), [])
+
+  // Lo que descuenta el cupón (el servidor lo calcula sobre el subtotal ya con ofertas)
+  const getCouponDiscount = useCallback(
+    () => (coupon ? Math.round(Number(coupon.discount) * 100) / 100 : 0),
+    [coupon]
+  )
+
+  // Lo que realmente se paga: ofertas + cupón
+  const getPayableTotal = useCallback(() => {
+    const cents = Math.round(getCartTotal() * 100) - Math.round(getCouponDiscount() * 100)
+    return Math.max(0, cents) / 100
+  }, [getCartTotal, getCouponDiscount])
+
   const dismissCartNotice = useCallback(() => setCartNotice(null), [])
 
-  // Compara el carrito con los precios, el stock y las ofertas VIGENTES del servidor
-  // y lo corrige. Devuelve qué cambió (el checkout lo usa antes de cobrar).
-  const syncCart = useCallback(async (): Promise<CartSyncResult> => {
-    const snapshot = cartRef.current
-    if (snapshot.length === 0) return EMPTY_SYNC
-
-    let quote: CartQuote
-    try {
-      quote = await getCartQuote(
-        snapshot.map((item) => ({ product_id: item.id, quantity: item.quantity }))
-      )
-    } catch {
-      // Sin conexión con el servidor: el carrito se conserva tal cual
-      return { ...EMPTY_SYNC, ok: false }
-    }
-
+  // Aplica una cotización del servidor al carrito: precios, ofertas y stock vigentes.
+  // Se aplica sobre el carrito más reciente: no pisa cambios hechos mientras se esperaba.
+  const reconcileCart = useCallback((snapshot: CartItem[], quote: CartQuote): CartSyncResult => {
     const quoted = new Map(quote.items.map((q) => [q.product_id, q] as const))
     const unavailable = new Set(quote.unavailable)
     const removed: string[] = []
@@ -201,7 +247,6 @@ export default function CartProvider({ children }: { children: ReactNode }) {
       if (item.quantity > q.stock) adjusted.push(item.name)
     }
 
-    // Se aplica sobre el carrito más reciente: no pisa cambios hechos mientras se esperaba
     setCart((prev) =>
       prev.flatMap((item) => {
         const q = quoted.get(item.id)
@@ -220,11 +265,86 @@ export default function CartProvider({ children }: { children: ReactNode }) {
       })
     )
 
-    const result: CartSyncResult = { ok: true, priceChanged, removed, adjusted }
-    const message = noticeFrom(result)
-    if (message) setCartNotice(message)
-    return result
+    return { ok: true, priceChanged, removed, adjusted, couponRemoved: null }
   }, [])
+
+  // Compara el carrito (y el cupón) con los precios, el stock y las ofertas VIGENTES del
+  // servidor y lo corrige. Devuelve qué cambió (el checkout lo usa antes de cobrar).
+  const syncCart = useCallback(async (): Promise<CartSyncResult> => {
+    const snapshot = cartRef.current
+    if (snapshot.length === 0) return EMPTY_SYNC
+
+    const sentCode = couponRef.current?.code
+    let quote: CartQuote
+    try {
+      quote = await getCartQuote(
+        snapshot.map((item) => ({ product_id: item.id, quantity: item.quantity })),
+        sentCode
+      )
+    } catch {
+      // Sin conexión con el servidor: el carrito se conserva tal cual
+      return { ...EMPTY_SYNC, ok: false }
+    }
+
+    const base = reconcileCart(snapshot, quote)
+    let message = noticeFrom(base)
+    let couponRemoved: string | null = null
+
+    // El cupón también se revalida. Solo se toca si sigue siendo el mismo que se envió
+    // (el cliente pudo quitarlo o cambiarlo mientras se esperaba la respuesta).
+    if (sentCode && couponRef.current?.code === sentCode) {
+      if (quote.coupon) {
+        setCoupon(quote.coupon)
+      } else {
+        setCoupon(null)
+        couponRemoved = sentCode
+        const reason = quote.coupon_error ?? "ya no es válido."
+        message = [`Quitamos el cupón ${sentCode}: ${reason}`, message]
+          .filter(Boolean)
+          .join(" ")
+      }
+    }
+
+    if (message) setCartNotice(message)
+    return { ...base, couponRemoved }
+  }, [reconcileCart])
+
+  // El cliente escribió un cupón: se comprueba con el servidor y, si sirve, se aplica.
+  // Si no, se devuelve el motivo para mostrarlo junto al campo (no como aviso general).
+  const applyCoupon = useCallback(
+    async (rawCode: string): Promise<CouponApplyResult> => {
+      const code = rawCode.trim()
+      if (!code) return { ok: false, message: "Escribe un código de cupón." }
+
+      const snapshot = cartRef.current
+      if (snapshot.length === 0) {
+        return { ok: false, message: "Añade productos al carrito para usar un cupón." }
+      }
+
+      let quote: CartQuote
+      try {
+        quote = await getCartQuote(
+          snapshot.map((item) => ({ product_id: item.id, quantity: item.quantity })),
+          code
+        )
+      } catch {
+        return {
+          ok: false,
+          message: "No se pudo comprobar el cupón. Revisa tu conexión e inténtalo de nuevo.",
+        }
+      }
+
+      const notice = noticeFrom(reconcileCart(snapshot, quote))
+      if (notice) setCartNotice(notice)
+
+      if (!quote.coupon) {
+        return { ok: false, message: quote.coupon_error ?? "No se pudo aplicar el cupón." }
+      }
+      setCoupon(quote.coupon)
+      return { ok: true, message: "" }
+    },
+    [reconcileCart]
+  )
 
   // Se vuelve a consultar solo cuando cambian los productos o las cantidades; los precios
   // actualizados no disparan otra consulta (no hay bucle).
@@ -263,6 +383,11 @@ export default function CartProvider({ children }: { children: ReactNode }) {
       syncCart,
       cartNotice,
       dismissCartNotice,
+      coupon,
+      applyCoupon,
+      removeCoupon,
+      getCouponDiscount,
+      getPayableTotal,
     }),
     [
       cart,
@@ -276,6 +401,11 @@ export default function CartProvider({ children }: { children: ReactNode }) {
       syncCart,
       cartNotice,
       dismissCartNotice,
+      coupon,
+      applyCoupon,
+      removeCoupon,
+      getCouponDiscount,
+      getPayableTotal,
     ]
   )
 
