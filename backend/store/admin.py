@@ -1,10 +1,11 @@
 from django.contrib import admin, messages
 from django.contrib.auth.admin import UserAdmin
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from .models import (
     Category,
+    Coupon,
     CustomUser,
     Order,
     OrderItem,
@@ -71,6 +72,7 @@ class OrderAdmin(admin.ModelAdmin):
         "shipping_city",
         "shipping_address",
         "payment_intent_id",
+        "coupon_code",
     )
     readonly_fields = (
         "user",
@@ -79,6 +81,8 @@ class OrderAdmin(admin.ModelAdmin):
         "shipping_address",
         "shipping_city",
         "payment_intent_id",
+        "coupon_code",
+        "discount_amount",
     )
     inlines = [OrderItemInline]
 
@@ -212,3 +216,91 @@ class PromotionAdmin(admin.ModelAdmin):
                 "no afectará a ningún precio hasta que añadas alguno.",
                 messages.WARNING,
             )
+
+@admin.register(Coupon)
+class CouponAdmin(admin.ModelAdmin):
+    list_display = (
+        "code",
+        "discount",
+        "min_purchase",
+        "usage",
+        "expires_at",
+        "is_active",
+        "status",
+    )
+    list_filter = ("is_active", "discount_type", "expires_at")
+    search_fields = ("code", "description")
+    date_hierarchy = "created_at"
+    readonly_fields = ("status", "usage", "created_at")
+    list_per_page = 25
+    actions = ("activate_coupons", "pause_coupons")
+    fieldsets = (
+        ("Cupón", {"fields": ("code", "description")}),
+        ("Descuento", {"fields": ("discount_type", "value", "min_purchase")}),
+        (
+            "Vigencia y límites",
+            {
+                "fields": (
+                    "starts_at",
+                    "expires_at",
+                    "max_uses",
+                    "max_uses_per_user",
+                    "is_active",
+                    "status",
+                    "usage",
+                ),
+                "description": "Solo cuentan los pedidos pagados para los límites de uso.",
+            },
+        ),
+        ("Auditoría", {"fields": ("created_at",)}),
+    )
+
+    def get_queryset(self, request):
+        # Los usos (pedidos pagados) se cuentan en la misma consulta
+        return (
+            super()
+            .get_queryset(request)
+            .annotate(_used_count=Count("orders", filter=Q(orders__status=Order.Status.PAID)))
+        )
+
+    def _used(self, obj):
+        used = getattr(obj, "_used_count", None)
+        if used is None:
+            used = obj.orders.filter(status=Order.Status.PAID).count() if obj.pk else 0
+        return used
+
+    @admin.display(description="Descuento", ordering="value")
+    def discount(self, obj):
+        return obj.discount_label
+
+    @admin.display(description="Usos (pagados)", ordering="_used_count")
+    def usage(self, obj):
+        limit = obj.max_uses if obj.max_uses is not None else "∞"
+        return f"{self._used(obj)} / {limit}"
+
+    @admin.display(description="Estado")
+    def status(self, obj):
+        if not obj.pk:
+            return "-"
+        now = timezone.now()
+        if not obj.is_active:
+            return "Pausado"
+        if obj.starts_at and now < obj.starts_at:
+            return "Programado"
+        if obj.expires_at and now > obj.expires_at:
+            return "Vencido"
+        if obj.max_uses is not None and self._used(obj) >= obj.max_uses:
+            return "Agotado"
+        return "Vigente"
+
+    @admin.action(description="Activar los cupones seleccionados")
+    def activate_coupons(self, request, queryset):
+        ids = list(queryset.values_list("pk", flat=True))
+        updated = Coupon.objects.filter(pk__in=ids).update(is_active=True)
+        self.message_user(request, f"Se activaron {updated} cupón(es).", messages.SUCCESS)
+
+    @admin.action(description="Pausar los cupones seleccionados")
+    def pause_coupons(self, request, queryset):
+        ids = list(queryset.values_list("pk", flat=True))
+        updated = Coupon.objects.filter(pk__in=ids).update(is_active=False)
+        self.message_user(request, f"Se pausaron {updated} cupón(es).", messages.SUCCESS)
