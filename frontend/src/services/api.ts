@@ -18,6 +18,7 @@ import type {
   PaymentIntentPayload,
   PaymentIntentResponse,
   Product,
+  PromotionsResponse,
   RegisterData,
   SavedBuild,
   SavedBuildPayload,
@@ -140,6 +141,13 @@ export async function getCartQuote(
     // Solo se envía si hay cupón: sin él, la cotización es la de siempre
     ...(couponCode ? { coupon_code: couponCode } : {}),
   })
+  return data
+}
+
+// ---------- Promociones ----------
+// Ofertas vigentes ahora (público). Incluye la hora del servidor para la cuenta regresiva.
+export async function getPromotions(): Promise<PromotionsResponse> {
+  const { data } = await api.get<PromotionsResponse>("promotions/")
   return data
 }
 
