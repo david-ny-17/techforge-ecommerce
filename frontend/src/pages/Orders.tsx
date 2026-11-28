@@ -188,6 +188,13 @@ export default function Orders() {
                     ))}
                   </ul>
 
+                  {order.coupon_code && (
+                    <div className="flex items-center justify-between border-t border-zinc-800 px-5 py-3 text-sm text-purple-300">
+                      <span>Cupón ({order.coupon_code})</span>
+                      <span>-{formatPrice(Number(order.discount_amount))}</span>
+                    </div>
+                  )}
+
                   <div className="flex items-end justify-between border-t border-zinc-800 px-5 py-4">
                     <span className="text-zinc-400">
                       {order.status === "PAID" ? "Total pagado" : "Total"}
