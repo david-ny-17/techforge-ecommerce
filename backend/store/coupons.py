@@ -9,6 +9,8 @@
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
+from django.core.cache import cache
+
 from django.utils import timezone
 
 from .models import Coupon, Order
@@ -23,6 +25,10 @@ MIN_PAYABLE_TOTAL = Decimal("5.00")
 
 class CouponError(Exception):
     """El cupón no se puede usar. El mensaje es apto para mostrarlo al cliente."""
+
+class CouponNotFoundError(CouponError):
+    """El código no existe o el cupón no está disponible (es lo que cuenta como intento
+    de adivinar códigos; los demás errores, como la compra mínima, no limitan nada)."""
 
 
 @dataclass(frozen=True)
@@ -92,7 +98,7 @@ def apply_coupon(raw_code, subtotal, user=None, now=None):
 
     coupon = Coupon.objects.filter(code=code).first()
     if coupon is None or not coupon.is_active:
-        raise CouponError("Este cupón no existe o no está disponible.")
+        raise CouponNotFoundError("Este cupón no existe o no está disponible.")
     if coupon.starts_at and now < coupon.starts_at:
         raise CouponError("Este cupón todavía no está vigente.")
     if coupon.expires_at and now > coupon.expires_at:
@@ -112,3 +118,28 @@ def apply_coupon(raw_code, subtotal, user=None, now=None):
         raise CouponError("Tu compra es demasiado pequeña para usar este cupón.")
 
     return AppliedCoupon(coupon=coupon, discount=discount, total=subtotal - discount)
+
+# ---------- Límite de intentos fallidos (contra quien intenta adivinar códigos) ----------
+
+MAX_FAILED_ATTEMPTS = 10  # intentos con un código inexistente por IP...
+FAILURE_WINDOW_SECONDS = 60  # ...dentro de esta ventana de tiempo
+RATE_LIMIT_MESSAGE = "Demasiados intentos con cupones. Espera un minuto e inténtalo de nuevo."
+
+
+def _failure_key(ident):
+    return f"coupon-failures:{ident}"
+
+
+def is_rate_limited(ident):
+    """True si esta IP ya agotó sus intentos fallidos con cupones en el último minuto."""
+    return cache.get(_failure_key(ident), 0) >= MAX_FAILED_ATTEMPTS
+
+
+def register_failure(ident):
+    """Anota un intento fallido (código inexistente) de esta IP."""
+    key = _failure_key(ident)
+    cache.add(key, 0, FAILURE_WINDOW_SECONDS)  # crea el contador solo si no existe
+    try:
+        cache.incr(key)
+    except ValueError:  # el contador expiró justo ahora
+        cache.set(key, 1, FAILURE_WINDOW_SECONDS)
