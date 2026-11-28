@@ -352,9 +352,29 @@ class CreatePaymentIntentView(APIView):
                     total += info.final_price * qty
                     lines.append((product, qty, info))
 
+                # Cupón (opcional): se valida en el servidor sobre el subtotal YA rebajado
+                coupon = None
+                discount = Decimal("0.00")
+                code = data.get("coupon_code", "").strip()
+                if code:
+                    ident = request.META.get("REMOTE_ADDR", "desconocido")
+                    if is_rate_limited(ident):
+                        raise CheckoutError(RATE_LIMIT_MESSAGE)
+                    try:
+                        applied = apply_coupon(code, total, user=request.user)
+                    except CouponNotFoundError as exc:
+                        register_failure(ident)  # solo los códigos inexistentes cuentan
+                        raise CheckoutError(str(exc)) from exc
+                    except CouponError as exc:
+                        raise CheckoutError(str(exc)) from exc
+                    coupon, discount = applied.coupon, applied.discount
+
                 order = Order.objects.create(
                     user=request.user,
-                    total=total,
+                    total=total - discount,
+                    coupon=coupon,
+                    coupon_code=coupon.code if coupon else "",
+                    discount_amount=discount,
                     status=Order.Status.PENDING,
                     shipping_address=data["shipping_address"],
                     shipping_city=data["shipping_city"],
