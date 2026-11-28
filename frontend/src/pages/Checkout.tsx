@@ -12,6 +12,7 @@ import type { ChangeEvent, FormEvent } from "react"
 import { Link, Navigate, useNavigate } from "react-router-dom"
 
 import CartNotice from "@/components/CartNotice"
+import CouponBox from "@/components/CouponBox"
 import FormField from "@/components/FormField"
 import { DiscountBadge } from "@/components/PriceTag"
 import { useAuth } from "@/context/useAuth"
@@ -77,7 +78,17 @@ function validate(form: ShippingForm): FormErrors {
 
 function CheckoutContent() {
   const { user } = useAuth()
-  const { cart, totalItems, clearCart, getCartTotal, getCartSavings, syncCart } = useCart()
+  const {
+    cart,
+    totalItems,
+    clearCart,
+    getCartTotal,
+    getCartSavings,
+    syncCart,
+    coupon,
+    getCouponDiscount,
+    getPayableTotal,
+  } = useCart()
   const navigate = useNavigate()
   const stripe = useStripe()
   const elements = useElements()
@@ -139,6 +150,7 @@ function CheckoutContent() {
     const city = form.city.trim()
     const signature = JSON.stringify({
       cart: cart.map((item) => [item.id, item.quantity, item.price]),
+      coupon: coupon?.code ?? null,
       address,
       city,
     })
@@ -151,6 +163,16 @@ function CheckoutContent() {
       // 0) Antes de cobrar se confirma que los precios, ofertas y stock que ve el cliente
       // siguen vigentes. Si algo cambió, NO se cobra: el aviso explica qué pasó.
       const sync = await syncCart()
+
+      if (sync.couponRemoved) {
+        setError(
+          `El cupón ${sync.couponRemoved} ya no es válido y lo quitamos de tu pedido. ` +
+            "Revisa el nuevo total y vuelve a pulsar «Pagar». No se ha hecho ningún cobro."
+        )
+        setSubmitting(false)
+        return
+      }
+
       if (sync.priceChanged || sync.removed.length > 0 || sync.adjusted.length > 0) {
         setError(
           "Los precios o la disponibilidad de tu pedido cambiaron. Revisa el nuevo total y " +
@@ -167,6 +189,7 @@ function CheckoutContent() {
           cart_items: cart.map((item) => ({ product_id: item.id, quantity: item.quantity })),
           shipping_address: address,
           shipping_city: city,
+          coupon_code: coupon?.code,
         })
         session = {
           orderId: created.order_id,
@@ -346,7 +369,7 @@ function CheckoutContent() {
               ) : (
                 <>
                   <Lock className="h-5 w-5" />
-                  Pagar {formatPrice(getCartTotal())}
+                  Pagar {formatPrice(getPayableTotal())}
                 </>
               )}
             </button>
@@ -403,6 +426,10 @@ function CheckoutContent() {
               </li>
             ))}
           </ul>
+          
+          <fieldset disabled={submitting} className="mt-4 min-w-0">
+            <CouponBox />
+          </fieldset>
 
           <div className="my-4 border-t border-zinc-800" />
 
@@ -420,10 +447,19 @@ function CheckoutContent() {
               </div>
             </dl>
           )}
+          
+          {coupon && (
+            <dl className="mb-3 space-y-2 text-sm">
+              <div className="flex justify-between text-purple-300">
+                <dt>Cupón ({coupon.code})</dt>
+                <dd>-{formatPrice(getCouponDiscount())}</dd>
+              </div>
+            </dl>
+          )}
 
           <div className="flex items-end justify-between">
             <span className="text-zinc-400">Total a pagar</span>
-            <span className="text-metal text-3xl font-bold">{formatPrice(getCartTotal())}</span>
+            <span className="text-metal text-3xl font-bold">{formatPrice(getPayableTotal())}</span>
           </div>
         </aside>
       </div>
