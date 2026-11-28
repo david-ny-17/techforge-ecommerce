@@ -74,6 +74,10 @@ export function parseCheckoutError(err: unknown): string {
           return `Ciudad de envío: ${cityErrors.join(" ")}`
         }
 
+        if (Array.isArray(body.coupon_code) && body.coupon_code.length > 0) {
+          return `Cupón: ${body.coupon_code.join(" ")}`
+        }
+
         if (body.cart_items) {
           return "Hay un problema con los productos de tu carrito. Revísalo e inténtalo de nuevo."
         }
