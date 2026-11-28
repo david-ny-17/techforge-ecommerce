@@ -193,6 +193,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "shipping_address",
             "shipping_city",
             "items",
+            "coupon_code",
+            "discount_amount",
         )
         read_only_fields = fields
 
@@ -206,12 +208,14 @@ class CartItemSerializer(serializers.Serializer):
 
 class CartQuoteSerializer(serializers.Serializer):
     cart_items = CartItemSerializer(many=True, allow_empty=False, max_length=50)
+    coupon_code = serializers.CharField(required=False, allow_blank=True, max_length=30)
     
 
 class CreatePaymentIntentSerializer(serializers.Serializer):
     cart_items = CartItemSerializer(many=True, allow_empty=False)
     shipping_address = serializers.CharField(min_length=5, max_length=255)
     shipping_city = serializers.CharField(min_length=2, max_length=100)
+    coupon_code = serializers.CharField(required=False, allow_blank=True, max_length=30)
 
 
 class ConfirmPaymentSerializer(serializers.Serializer):
