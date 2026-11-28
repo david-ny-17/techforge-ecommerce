@@ -5,6 +5,7 @@ import type { ChangeEvent, FormEvent } from "react"
 import { useSearchParams } from "react-router-dom"
 
 import ProductCard from "@/components/ProductCard"
+import PromoBar from "@/components/PromoBar"
 import { getCategories, getProducts } from "@/services/api"
 import type { Category, Product } from "@/types"
 
@@ -380,6 +381,8 @@ export default function Catalog() {
           </p>
         )}
       </header>
+      
+      <PromoBar className="mb-8" />
 
       <div className="flex flex-col gap-8 lg:flex-row">
         {/* Sidebar de categorías (chips con scroll horizontal en móvil) */}
