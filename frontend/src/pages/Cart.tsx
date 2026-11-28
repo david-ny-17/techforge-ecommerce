@@ -2,6 +2,7 @@ import { ArrowLeft, ImageOff, Minus, Plus, ShoppingBag, Trash2 } from "lucide-re
 import { Link } from "react-router-dom"
 
 import CartNotice from "@/components/CartNotice"
+import CouponBox from "@/components/CouponBox"
 import { DiscountBadge } from "@/components/PriceTag"
 import { useCart } from "@/context/useCart"
 import { formatPrice } from "@/lib/format"
@@ -15,6 +16,9 @@ export default function Cart() {
     clearCart,
     getCartTotal,
     getCartSavings,
+    coupon,
+    getCouponDiscount,
+    getPayableTotal,
   } = useCart()
 
   // Carrito vacío
@@ -161,6 +165,8 @@ export default function Cart() {
             Resumen del pedido
           </h2>
 
+          <CouponBox className="mt-4" />
+
           <dl className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between text-zinc-400">
               <dt>Artículos</dt>
@@ -181,6 +187,13 @@ export default function Cart() {
                 </div>
               </>
             )}
+            
+            {coupon && (
+              <div className="flex justify-between text-purple-300">
+                <dt>Cupón ({coupon.code})</dt>
+                <dd>-{formatPrice(getCouponDiscount())}</dd>
+              </div>
+            )}
 
           </dl>
 
@@ -189,7 +202,7 @@ export default function Cart() {
           <div className="flex items-end justify-between">
             <span className="text-zinc-400">Total a pagar</span>
             <span className="text-metal text-3xl font-bold">
-              {formatPrice(getCartTotal())}
+              {formatPrice(getPayableTotal())}
             </span>
           </div>
 
