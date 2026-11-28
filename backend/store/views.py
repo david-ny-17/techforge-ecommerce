@@ -16,6 +16,14 @@ from rest_framework.views import APIView
 from stripe import StripeClient, StripeError
 
 from .ai_service import AIServiceError, get_pc_build_recommendation
+from .coupons import (
+    RATE_LIMIT_MESSAGE,
+    CouponError,
+    CouponNotFoundError,
+    apply_coupon,
+    is_rate_limited,
+    register_failure,
+)
 from .models import Category, Order, OrderItem, Product
 from .pricing import annotate_effective_price, build_promotion_index
 from .serializers import (
@@ -184,13 +192,45 @@ class CartQuoteView(APIView):
                 }
             )
 
+        # Cupón (opcional): se valida sobre el subtotal YA rebajado por las ofertas.
+        # Si no sirve, la cotización se devuelve igual, con el motivo en coupon_error.
+        code = serializer.validated_data.get("coupon_code", "").strip()
+        applied = None
+        coupon_error = None
+        if code:
+            ident = request.META.get("REMOTE_ADDR", "desconocido")
+            if is_rate_limited(ident):
+                coupon_error = RATE_LIMIT_MESSAGE
+            else:
+                try:
+                    applied = apply_coupon(code, total, user=request.user)
+                except CouponNotFoundError as exc:
+                    register_failure(ident)  # solo los códigos inexistentes cuentan
+                    coupon_error = str(exc)
+                except CouponError as exc:
+                    coupon_error = str(exc)
+
+        coupon_discount = applied.discount if applied else Decimal("0.00")
+        coupon_data = None
+        if applied:
+            coupon_data = {
+                "code": applied.coupon.code,
+                "label": applied.coupon.discount_label,
+                "description": applied.coupon.description,
+                "discount": f"{applied.discount:.2f}",
+            }
+
         return Response(
             {
                 "items": items,
                 "unavailable": unavailable,
                 "list_total": f"{list_total:.2f}",
                 "discount_total": f"{list_total - total:.2f}",
-                "total": f"{total:.2f}",
+                "subtotal": f"{total:.2f}",
+                "coupon": coupon_data,
+                "coupon_discount": f"{coupon_discount:.2f}",
+                "coupon_error": coupon_error,
+                "total": f"{total - coupon_discount:.2f}",
             }
         )
 
