@@ -132,9 +132,14 @@ export async function getProductBySlug(slug: string): Promise<Product> {
 // ---------- Carrito ----------
 // Precios VIGENTES (promociones incluidas) de lo que hay en el carrito. Es público.
 export async function getCartQuote(
-  items: { product_id: number; quantity: number }[]
+  items: { product_id: number; quantity: number }[],
+  couponCode?: string
 ): Promise<CartQuote> {
-  const { data } = await api.post<CartQuote>("cart/quote/", { cart_items: items })
+  const { data } = await api.post<CartQuote>("cart/quote/", {
+    cart_items: items,
+    // Solo se envía si hay cupón: sin él, la cotización es la de siempre
+    ...(couponCode ? { coupon_code: couponCode } : {}),
+  })
   return data
 }
 
